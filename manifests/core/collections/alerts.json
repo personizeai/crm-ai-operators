@@ -1,0 +1,30 @@
+{
+  "name": "Alerts",
+  "slug": "alerts",
+  "description": "Notifications requiring attention — produced by Monitors, agent observations, or system events. Alerts have severity, an audience, and a status that progresses from open → acknowledged → resolved.",
+  "icon": "bell",
+  "color": "#EF4444",
+  "primaryKeyField": "alert_id",
+  "properties": [
+    { "propertyName": "Alert ID", "systemName": "alert_id", "type": "text", "autoSystem": false, "description": "Stable unique identifier — typically a_<timestamp>_<short-hash>." },
+    { "propertyName": "Title", "systemName": "title", "type": "text", "autoSystem": false, "description": "Short headline. Example: 'Usage drop detected: Meridian Health', 'Reply requires AE response', 'HubSpot sync stalled 4h'." },
+    { "propertyName": "Severity", "systemName": "severity", "type": "options", "autoSystem": false, "options": ["info", "warning", "critical"], "description": "info = good to know; warning = action needed soon; critical = act immediately." },
+    { "propertyName": "Category", "systemName": "category", "type": "options", "autoSystem": false, "options": ["anomaly", "threshold", "reminder", "escalation", "opportunity", "error", "handoff"], "description": "What kind of alert. anomaly = unexpected pattern; threshold = a value crossed a line; reminder = scheduled check-in; escalation = requires manager attention; opportunity = positive signal worth acting on; error = system failure; handoff = agent → human transfer." },
+    { "propertyName": "Message", "systemName": "message", "type": "text", "autoSystem": false, "description": "Full alert message. Should be self-contained — a reader who hasn't seen the source data should still understand the situation. Examples: 'Login frequency dropped 40% week-over-week. Renewal in 3 months.', 'Reply from VP Sales at tier-A account — handoff to AE.'" },
+    { "propertyName": "Target Audience", "systemName": "target_audience", "type": "options", "autoSystem": false, "options": ["user", "team", "manager", "agent", "system"], "description": "Who should see this alert. user = the operating user; team = the team channel; manager = escalation channel; agent = consumed by another operation; system = log-only." },
+
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["open", "acknowledged", "resolved", "dismissed", "expired"], "description": "Lifecycle. open = needs attention; acknowledged = seen; resolved = action taken; dismissed = won't act; expired = aged out without resolution." },
+    { "propertyName": "Acknowledged By", "systemName": "acknowledged_by", "type": "text", "autoSystem": false, "description": "Who acknowledged. 'human:<email>', '<agent_name>', or 'system'." },
+    { "propertyName": "Acknowledged At", "systemName": "acknowledged_at", "type": "date", "autoSystem": false, "description": "When the alert moved from open → acknowledged." },
+    { "propertyName": "Resolved By", "systemName": "resolved_by", "type": "text", "autoSystem": false, "description": "Who resolved." },
+    { "propertyName": "Resolved At", "systemName": "resolved_at", "type": "date", "autoSystem": false, "description": "When the alert moved from acknowledged → resolved/dismissed." },
+    { "propertyName": "Resolution", "systemName": "resolution", "type": "text", "autoSystem": false, "description": "What was done. One sentence. Example: 'Booked QBR with champion for April 3', 'Sync restarted, backlog cleared in 1h'." },
+
+    { "propertyName": "Source Monitor ID", "systemName": "source_monitor_id", "type": "text", "autoSystem": false, "description": "If this alert was raised by a Monitor, the monitor_id. Empty for ad-hoc alerts." },
+    { "propertyName": "Linked Entity Key", "systemName": "custom_key_name", "type": "options", "autoSystem": false, "options": ["email", "website_url", "name", "record_id", "global"], "description": "What this alert is about." },
+    { "propertyName": "Linked Entity Value", "systemName": "custom_key_value", "type": "text", "autoSystem": false, "description": "Value of the linked entity's key. Use memory_filter_by_property(type='alert', custom_key_value=...) to find all alerts for an entity." },
+    { "propertyName": "Project", "systemName": "project", "type": "text", "autoSystem": false, "description": "Project / campaign this alert belongs to, when applicable." },
+    { "propertyName": "Created At", "systemName": "created_at", "type": "date", "autoSystem": false, "description": "When the alert was raised." },
+    { "propertyName": "Expires At", "systemName": "expires_at", "type": "date", "autoSystem": false, "description": "Optional auto-expiration. Alerts past this time auto-transition to status='expired' if still open." }
+  ]
+}

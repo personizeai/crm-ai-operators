@@ -1,0 +1,20 @@
+{
+  "name": "Operation Runs",
+  "slug": "operation-runs",
+  "description": "Audit and lifecycle records for bounded agent runs across setup, operation, and optimization modes.",
+  "icon": "activity",
+  "color": "#0F766E",
+  "primaryKeyField": "run_id",
+  "properties": [
+    { "propertyName": "Run ID", "systemName": "run_id", "type": "text", "autoSystem": false, "description": "Unique operation run identifier." },
+    { "propertyName": "Mode", "systemName": "mode", "type": "options", "autoSystem": false, "options": ["setup", "operation", "optimization"], "description": "Agent operating mode for this run." },
+    { "propertyName": "Operation", "systemName": "operation", "type": "text", "autoSystem": false, "description": "Operation name from the registry." },
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["started", "completed", "failed", "cancelled"], "description": "Current run status." },
+    { "propertyName": "Dry Run", "systemName": "dry_run", "type": "boolean", "autoSystem": false, "description": "Whether the operation was prevented from making live writes." },
+    { "propertyName": "Records Scanned", "systemName": "records_scanned", "type": "number", "autoSystem": false, "description": "Count of records inspected." },
+    { "propertyName": "Records Updated", "systemName": "records_updated", "type": "number", "autoSystem": false, "description": "Count of records updated." },
+    { "propertyName": "Summary", "systemName": "summary", "type": "text", "autoSystem": false, "description": "Human-readable result summary." },
+    { "propertyName": "Started At", "systemName": "started_at", "type": "date", "autoSystem": false, "description": "Operation start timestamp." },
+    { "propertyName": "Completed At", "systemName": "completed_at", "type": "date", "autoSystem": false, "description": "Operation completion timestamp." }
+  ]
+}

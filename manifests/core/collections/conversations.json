@@ -1,0 +1,37 @@
+{
+  "name": "Conversations",
+  "slug": "conversations",
+  "description": "Unified record of every meaningful interaction with a contact — emails, calls, meetings, LinkedIn messages, SMS. Replaces channel-specific collections so scripts read one shape regardless of channel.",
+  "icon": "message-square",
+  "color": "#0EA5E9",
+  "primaryKeyField": "conversation_id",
+  "properties": [
+    { "propertyName": "Conversation ID", "systemName": "conversation_id", "type": "text", "autoSystem": false, "description": "Stable unique identifier — typically <provider>:<source_id> for idempotent re-delivery." },
+    { "propertyName": "Type", "systemName": "type", "type": "options", "autoSystem": false, "options": ["email", "call", "meeting", "linkedin", "sms", "chat", "form", "note", "other"], "description": "Channel/medium of the conversation." },
+    { "propertyName": "Direction", "systemName": "direction", "type": "options", "autoSystem": false, "options": ["inbound", "outbound", "internal"], "description": "Who initiated the conversation." },
+    { "propertyName": "Subject", "systemName": "subject", "type": "text", "autoSystem": false, "description": "Subject line for emails; topic for calls; title for meetings." },
+    { "propertyName": "Body", "systemName": "body", "type": "text", "autoSystem": false, "description": "Full text content — email body, call transcript, meeting notes, message body. Kept as-is for re-extraction." },
+    { "propertyName": "Body Preview", "systemName": "body_preview", "type": "text", "autoSystem": true, "description": "First 200 characters of body, for quick scanning in lists." },
+
+    { "propertyName": "Contact Email", "systemName": "contact_email", "type": "text", "autoSystem": false, "description": "Primary contact email this conversation is associated with." },
+    { "propertyName": "Company Domain", "systemName": "company_domain", "type": "text", "autoSystem": false, "description": "Company domain when no specific contact is identified." },
+    { "propertyName": "Sender", "systemName": "sender", "type": "text", "autoSystem": false, "description": "Email address or identifier of the sender." },
+    { "propertyName": "Recipients", "systemName": "recipients", "type": "array", "autoSystem": false, "description": "List of recipient identifiers (emails for email, phone numbers for SMS, etc.)." },
+
+    { "propertyName": "Sent At", "systemName": "sent_at", "type": "date", "autoSystem": false, "description": "When the conversation occurred in the source system." },
+    { "propertyName": "Duration Seconds", "systemName": "duration_seconds", "type": "number", "autoSystem": false, "description": "Length in seconds for calls and meetings." },
+
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["sent", "delivered", "opened", "clicked", "replied", "bounced", "scheduled", "completed", "no-show", "cancelled"], "description": "Engagement state." },
+    { "propertyName": "Sentiment", "systemName": "sentiment", "type": "options", "autoSystem": true, "options": ["Positive", "Neutral", "Skeptical", "Frustrated", "Unknown"], "description": "AI-inferred sentiment of the conversation." },
+    { "propertyName": "Summary", "systemName": "summary", "type": "text", "autoSystem": true, "description": "AI-generated one-paragraph summary of what was discussed and decided." },
+    { "propertyName": "Action Items", "systemName": "action_items", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Concrete next steps extracted from the conversation. Each entry: { owner, action, due_date }." },
+
+    { "propertyName": "Campaign ID", "systemName": "campaign_id", "type": "text", "autoSystem": false, "description": "Campaign or sequence this conversation belongs to, when applicable." },
+    { "propertyName": "Sequence Step", "systemName": "sequence_step", "type": "number", "autoSystem": false, "description": "Step number within the active sequence (1, 2, 3...). Null for one-off conversations." },
+
+    { "propertyName": "CRM Source", "systemName": "crm_source", "type": "options", "autoSystem": false, "options": ["HubSpot", "Salesforce", "Personize", "Other"], "description": "CRM where this conversation originated." },
+    { "propertyName": "CRM Record ID", "systemName": "crm_record_id", "type": "text", "autoSystem": false, "description": "Native CRM record ID (Email, Call, Meeting object) for writeback." },
+
+    { "propertyName": "Processed By", "systemName": "processed_by", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Names of scripts/operations that have already consumed this conversation. Prevents duplicate processing." }
+  ]
+}

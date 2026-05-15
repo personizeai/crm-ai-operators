@@ -1,0 +1,60 @@
+{
+  "_comment": "Example Claude Code settings hooks for crm-ai-operators. Drop the relevant pieces into your .claude/settings.json (or .claude/settings.local.json). All hooks here are opt-in and reversible.",
+
+  "hooks": {
+    "PostToolUse": [
+      {
+        "_purpose": "Append every operation_run call to a daily activity log so you can trace what your agent ran without parsing the audit JSONL by hand.",
+        "matcher": "operation_run",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[$(date -Iseconds)] operation_run completed\" >> data/audit/agent-activity.log"
+          }
+        ]
+      },
+      {
+        "_purpose": "After a setup.apply run, dump a compact summary so you can see what changed in this session.",
+        "matcher": "operation_run",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "tail -1 data/audit/$(date +%Y-%m-%d).jsonl | jq -r 'if .meta.operation == \"setup.apply\" then \"setup.apply: \" + (.meta.summary // \"no summary\") else empty end' 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "_purpose": "Safety gate — refuse to run live (DRY_RUN=false) operations that aren't idempotent unless the user has explicitly authorized in this session. Replace the `agree-to-live-writes` token check with whatever your team uses.",
+        "matcher": "operation_run",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$DRY_RUN\" = \"false\" ] && [ ! -f .claude/agree-to-live-writes ]; then echo 'BLOCKED: DRY_RUN=false but no .claude/agree-to-live-writes token. Touch the file to authorize this session.' >&2; exit 1; fi"
+          }
+        ]
+      }
+    ],
+
+    "Notification": [
+      {
+        "_purpose": "Forward any handoff alert (severity=critical, category=handoff) to a Slack webhook so reps see it in <1 minute. Set CRM_AI_SLACK_WEBHOOK in your environment.",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"$CRM_AI_SLACK_WEBHOOK\" ] && echo \"$CLAUDE_NOTIFICATION\" | grep -q 'handoff'; then curl -s -X POST -H 'Content-Type: application/json' --data \"{\\\"text\\\":\\\"$CLAUDE_NOTIFICATION\\\"}\" \"$CRM_AI_SLACK_WEBHOOK\" >/dev/null; fi"
+          }
+        ]
+      }
+    ]
+  },
+
+  "_recommended_workflow": [
+    "1. Copy the hooks block into .claude/settings.local.json (project-scoped, gitignored).",
+    "2. Test with: PERSONIZE_SECRET_KEY=fake DRY_RUN=true npx tsx src/scripts/crm-agent.ts operation list",
+    "3. To enable live writes for a session, run: touch .claude/agree-to-live-writes && DRY_RUN=false ...",
+    "4. Remove the token file when you're done: rm .claude/agree-to-live-writes"
+  ]
+}

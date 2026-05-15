@@ -1,0 +1,27 @@
+{
+  "name": "Projects",
+  "slug": "projects",
+  "description": "Project / campaign / account workspaces — multi-step initiatives with their own context, timeline, decisions, and audit trail. Tasks link here via the project field; conversations and signals can also be project-scoped.",
+  "icon": "folder",
+  "color": "#8B5CF6",
+  "primaryKeyField": "workspace_name",
+  "properties": [
+    { "propertyName": "Project Name", "systemName": "workspace_name", "type": "text", "autoSystem": false, "description": "Name of this project / campaign / account workspace. Primary key — used by tasks (via project field) and recall. Set once. Examples: 'Q2 Manufacturing Outreach', 'Onboarding Redesign', 'Account: Meridian Health'." },
+    { "propertyName": "Project Type", "systemName": "workspace_type", "type": "options", "autoSystem": false, "options": ["Campaign", "Project", "Account", "General"], "description": "Category. Campaign = outbound sequence. Project = multi-step initiative with tasks and milestones. Account = workspace dedicated to a key contact/company. General = catch-all." },
+    { "propertyName": "Description", "systemName": "workspace_description", "type": "text", "autoSystem": false, "description": "One sentence describing what this workspace is and why it exists. Set once. NOT a living summary — that belongs in Context." },
+
+    { "propertyName": "Context", "systemName": "context", "type": "text", "autoSystem": true, "description": "The current-state summary. The 'start here' for anyone engaging — what's happening right now, what matters, what to do next. 1-3 paragraphs. REPLACES on each update; this is a living summary, not a history." },
+    { "propertyName": "Updates", "systemName": "updates", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Chronological timeline of events — actions taken, observations, milestones. Each entry: { author, type (observation|action|change|milestone), summary, details, timestamp }. Append-only." },
+    { "propertyName": "Notes", "systemName": "notes", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Knowledge base — observations, analysis, ideas, references. Each entry: { author, content, category (observation|analysis|idea|reference|question), timestamp }. Append-only." },
+    { "propertyName": "Decisions", "systemName": "decisions", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Choices made with full reasoning — the explainability layer. Each entry: { question, decision, reasoning, alternatives, confidence (low|medium|high), autonomous (boolean), approvedBy, timestamp }. Append-only. If a decision is reversed, add a new entry explaining why." },
+    { "propertyName": "Messages Sent", "systemName": "messages_sent", "type": "array", "autoSystem": false, "updateSemantics": "append", "description": "Outbound communications audit. Each entry: { channel, recipient, subject, summary, step, sentAt, sentBy, status }. Append-only — never alter comms history." },
+    { "propertyName": "Reports", "systemName": "reports", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Periodic summaries synthesizing activity, results, recommendations. Each entry: { title, content (markdown), period, generatedBy, audience, highlights, timestamp }. Append-only." },
+
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["draft", "pending", "active", "running", "paused", "completed", "failed", "archived"], "description": "Current state. Operations MUST update before and after execution." },
+    { "propertyName": "Assignee", "systemName": "assignee", "type": "text", "autoSystem": false, "description": "User ID, agent slug, or 'system' for automated. Use 'any' when unassigned." },
+    { "propertyName": "Priority", "systemName": "priority", "type": "options", "autoSystem": false, "options": ["urgent", "high", "normal", "low"], "description": "Urgency: urgent (act now), high (today), normal (this week), low (when available)." },
+    { "propertyName": "Due Date", "systemName": "due_date", "type": "date", "autoSystem": false, "description": "Project / campaign target completion date. NOT a task due date — task deadlines live on each Tasks record." },
+    { "propertyName": "Channel", "systemName": "channel", "type": "options", "autoSystem": false, "options": ["email", "linkedin", "phone", "multi", "system"], "description": "Primary channel for this project's work, when applicable." },
+    { "propertyName": "Parent", "systemName": "parent", "type": "text", "autoSystem": false, "description": "workspace_name of the parent project. Enables nesting (campaign → sub-campaigns, project → sub-projects)." }
+  ]
+}

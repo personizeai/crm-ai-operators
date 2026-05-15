@@ -1,0 +1,28 @@
+{
+  "name": "Tasks",
+  "slug": "tasks",
+  "description": "First-class tasks: discrete units of work assigned to an agent or human, linked to a contact/company/project. Queryable independently of the entity they touch — find all open high-priority tasks across the org with one filter call.",
+  "icon": "check-square",
+  "color": "#10B981",
+  "primaryKeyField": "task_id",
+  "properties": [
+    { "propertyName": "Task ID", "systemName": "task_id", "type": "text", "autoSystem": false, "description": "Stable unique identifier — typically t_<timestamp>_<short-hash>." },
+    { "propertyName": "Title", "systemName": "title", "type": "text", "autoSystem": false, "description": "Short verb-first action title. Examples: 'Send follow-up to Alice Chen', 'Classify reply from Acme Corp', 'Enrich contact: Bob at Stripe'. The memorizer uses this to identify content as a task." },
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["open", "in_progress", "done", "cancelled", "declined"], "description": "Current task status. Always update to 'done', 'cancelled', or 'declined' when finishing." },
+    { "propertyName": "Priority", "systemName": "priority", "type": "options", "autoSystem": false, "options": ["low", "medium", "high", "urgent"], "description": "Task urgency. Drives operator execution order — 'urgent' and 'high' run first." },
+    { "propertyName": "Task Type", "systemName": "task_type", "type": "options", "autoSystem": false, "options": ["send-email", "classify-reply", "enrich-contact", "research", "score", "follow-up", "meeting-request", "review", "approve", "publish", "log-activity", "notify-rep", "other"], "description": "Type of work, used by the operation runner to route the task to the right operation. Maps to operations under the matching category — e.g. 'send-email' → generate.outreach-sequence + act.* steps; 'classify-reply' → analyze.reply-sentiment." },
+    { "propertyName": "Assigned To", "systemName": "assigned_to", "type": "text", "autoSystem": false, "description": "Who executes. Conventions: 'agent' (any autonomous operator), 'human:<email>' (specific person), 'research-agent', 'rep:<owner>', 'system'. Defaults to 'agent'." },
+    { "propertyName": "Due Date", "systemName": "due_date", "type": "date", "autoSystem": false, "description": "Task due date. Use memory_filter_by_property(due_date LT today) to surface overdue tasks." },
+    { "propertyName": "Notes", "systemName": "notes", "type": "text", "autoSystem": false, "description": "Execution context — what the executing agent needs to complete this task. Constraints, references, prior context. Examples: 'Alice mentioned budget freeze in last reply — address in email', 'Use case-study CTA per March campaign data'." },
+
+    { "propertyName": "Linked Entity Key", "systemName": "custom_key_name", "type": "options", "autoSystem": false, "options": ["email", "website_url", "name", "record_id"], "description": "Personize lookup key for the linked entity. 'email' for a contact, 'website_url' for a company, 'name' for a project/campaign/workspace, 'record_id' for any entity by internal ID." },
+    { "propertyName": "Linked Entity Value", "systemName": "custom_key_value", "type": "text", "autoSystem": false, "description": "Value of the linked entity's key. Examples: 'alice@acme.com', 'acme.com', 'Q2 Manufacturing Outreach'. Use memory_filter_by_property(custom_key_value=...) to find all tasks for an entity." },
+    { "propertyName": "Project", "systemName": "project", "type": "text", "autoSystem": false, "description": "Project / campaign / workspace this task belongs to (matches the project's workspace_name). Use memory_filter_by_property(project=...) to find all tasks in a project." },
+
+    { "propertyName": "Created By", "systemName": "created_by", "type": "text", "autoSystem": false, "description": "Who created the task. Conventions: '<operation_name>' for tasks emitted by operations, 'human:<email>' for human-created, 'webhook:<provider>' for external triggers." },
+    { "propertyName": "Created At", "systemName": "created_at", "type": "date", "autoSystem": false, "description": "When the task was created." },
+    { "propertyName": "Completed At", "systemName": "completed_at", "type": "date", "autoSystem": false, "description": "When the task transitioned to done/cancelled/declined." },
+    { "propertyName": "Completed By", "systemName": "completed_by", "type": "text", "autoSystem": false, "description": "Who finalized the task. Usually equal to assigned_to but may differ when reassigned." },
+    { "propertyName": "Outcome", "systemName": "outcome", "type": "text", "autoSystem": false, "description": "What happened. One sentence summarizing the result. Examples: 'Email sent, reply within 4h', 'Skipped — contact opted out', 'Escalated to AE — high-intent reply'." }
+  ]
+}

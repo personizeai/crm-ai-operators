@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.mcp.json
+*.pem
+*.key
+data/audit/*.jsonl
+data/state/*.txt

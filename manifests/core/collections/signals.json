@@ -1,0 +1,32 @@
+{
+  "name": "Signals",
+  "slug": "signals",
+  "description": "Universal inbound event stream — every meaningful event from any source (CRM webhooks, ad platforms, web analytics, third-party iPaaS, custom integrations) lands here as a typed signal that scripts can query, score, and act on.",
+  "icon": "activity",
+  "color": "#F59E0B",
+  "primaryKeyField": "signal_id",
+  "properties": [
+    { "propertyName": "Signal ID", "systemName": "signal_id", "type": "text", "autoSystem": false, "description": "Stable unique identifier for this signal — typically <provider>:<source_event_id> to allow idempotent re-delivery." },
+    { "propertyName": "Provider", "systemName": "provider", "type": "options", "autoSystem": false, "options": ["personize-passthrough", "hubspot-webhook", "salesforce-webhook", "segment", "stripe", "custom-webhook", "manual"], "description": "Inbound source that delivered this signal. Used for routing, debugging, and provider-level filtering." },
+    { "propertyName": "Source", "systemName": "source", "type": "text", "autoSystem": false, "description": "Concrete origin within the provider. Examples: 'google-ads', 'meta-ads', 'ga4', 'hubspot.contact.created', 'stripe.invoice.paid'." },
+    { "propertyName": "Type", "systemName": "type", "type": "options", "autoSystem": false, "options": ["engagement", "intent", "conversion", "lifecycle", "support", "purchase", "intel", "anomaly", "other"], "description": "Normalized signal class. Scripts filter on this rather than provider-specific source strings." },
+    { "propertyName": "Severity", "systemName": "severity", "type": "options", "autoSystem": false, "options": ["low", "medium", "high", "critical"], "description": "Importance signal scoring scripts use to prioritize follow-up. Default 'low' unless mapping declares otherwise." },
+    { "propertyName": "Occurred At", "systemName": "occurred_at", "type": "date", "autoSystem": false, "description": "Timestamp the underlying event happened in the source system (not when Personize received it)." },
+    { "propertyName": "Received At", "systemName": "received_at", "type": "date", "autoSystem": false, "description": "Timestamp Personize ingested this signal. Used for backfill detection and freshness scoring." },
+    { "propertyName": "Entity Email", "systemName": "entity_email", "type": "text", "autoSystem": false, "description": "Email used to resolve this signal to a Contact. May be empty if anonymous; resolution will be attempted on later signals." },
+    { "propertyName": "Entity Domain", "systemName": "entity_domain", "type": "text", "autoSystem": false, "description": "Company domain used to resolve this signal to a Company when no email is available." },
+    { "propertyName": "Entity CRM Record ID", "systemName": "entity_crm_record_id", "type": "text", "autoSystem": false, "description": "Native CRM record ID when the source provides one. Allows direct-link resolution without email/domain matching." },
+    { "propertyName": "Entity Resolution Status", "systemName": "entity_resolution_status", "type": "options", "autoSystem": true, "options": ["resolved", "ambiguous", "no-match", "pending"], "description": "Whether this signal was successfully linked to a Contact or Company. 'pending' signals are retried on later signals; 'no-match' signals stay quarantined for review." },
+    { "propertyName": "Resolved Contact ID", "systemName": "resolved_contact_id", "type": "text", "autoSystem": true, "description": "Personize Contacts record ID this signal resolved to, if any." },
+    { "propertyName": "Resolved Company ID", "systemName": "resolved_company_id", "type": "text", "autoSystem": true, "description": "Personize Companies record ID this signal resolved to, if any." },
+    { "propertyName": "Title", "systemName": "title", "type": "text", "autoSystem": true, "description": "Short human-readable description. Examples: 'Visited /pricing', 'Replied to outreach email', 'New funding round announced'." },
+    { "propertyName": "Summary", "systemName": "summary", "type": "text", "autoSystem": true, "description": "AI-generated one-paragraph explanation of what happened and why it matters. Filled by extraction or research scripts." },
+    { "propertyName": "Payload", "systemName": "payload", "type": "text", "autoSystem": false, "description": "Raw provider payload as JSON string. Kept for re-extraction and debugging. Scripts should not parse this directly — use mapped properties instead." },
+    { "propertyName": "Channel", "systemName": "channel", "type": "options", "autoSystem": false, "options": ["email", "phone", "sms", "linkedin", "web", "ads", "in-app", "in-person", "other"], "description": "Channel the signal originated on, when applicable." },
+    { "propertyName": "Campaign ID", "systemName": "campaign_id", "type": "text", "autoSystem": false, "description": "Campaign or sequence the signal is associated with, when applicable." },
+    { "propertyName": "Score Delta", "systemName": "score_delta", "type": "number", "autoSystem": true, "description": "Suggested change to the entity's AI score from this signal alone. Aggregated by lead-quality and account-score scripts." },
+    { "propertyName": "Action Required", "systemName": "action_required", "type": "boolean", "autoSystem": true, "description": "Whether this signal requires human or agent follow-up. Set by analyze.* and score.* scripts during processing." },
+    { "propertyName": "Processed By", "systemName": "processed_by", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Names of scripts/operations that have already consumed this signal. Prevents duplicate processing across cycles." },
+    { "propertyName": "Tags", "systemName": "tags", "type": "array", "autoSystem": true, "updateSemantics": "append", "description": "Free-form tags scripts can use to filter or group. Examples: 'high-intent', 'enterprise', 'churn-risk'." }
+  ]
+}

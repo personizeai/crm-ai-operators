@@ -1,0 +1,29 @@
+{
+  "name": "Monitors",
+  "slug": "monitors",
+  "description": "Persistent watchers that check for conditions on a schedule or every agent pulse. A monitor describes WHAT to look for, WHY it matters, and WHAT TO DO when the condition triggers. Monitors emit Alerts when triggered.",
+  "icon": "eye",
+  "color": "#06B6D4",
+  "primaryKeyField": "monitor_id",
+  "properties": [
+    { "propertyName": "Monitor ID", "systemName": "monitor_id", "type": "text", "autoSystem": false, "description": "Stable unique identifier — typically m_<timestamp>_<short-hash>." },
+    { "propertyName": "Target", "systemName": "target", "type": "text", "autoSystem": false, "description": "What the monitor watches. Examples: 'Login frequency for sarah@meridian.com', 'HubSpot sync freshness', 'New high-intent replies', 'account_score for tier-A accounts'." },
+    { "propertyName": "Description", "systemName": "description", "type": "text", "autoSystem": false, "description": "Human-readable description: WHY this matters. Example: 'Alert if drops below 3 logins/week — early churn signal'." },
+    { "propertyName": "Type", "systemName": "monitor_type", "type": "options", "autoSystem": false, "options": ["threshold", "change_detection", "schedule", "absence", "anomaly"], "description": "How the monitor evaluates. threshold = value crosses a number; change_detection = value moves materially; schedule = run on cadence; absence = expected event didn't happen; anomaly = AI-detected outlier." },
+    { "propertyName": "Frequency", "systemName": "frequency", "type": "options", "autoSystem": false, "options": ["every_pulse", "hourly", "daily", "weekly", "monthly", "on_event"], "description": "How often the monitor runs. every_pulse = each agent cycle; on_event = triggered by webhook or signal arrival." },
+    { "propertyName": "Action", "systemName": "action", "type": "options", "autoSystem": false, "options": ["notify", "escalate", "auto_act", "log_only"], "description": "What happens when the condition triggers. notify = create an Alert. escalate = create an Alert + create a high-priority Task. auto_act = run a specific operation. log_only = append to workspace updates." },
+    { "propertyName": "Action Operation", "systemName": "action_operation", "type": "text", "autoSystem": false, "description": "When action='auto_act', the operation name to run (e.g. 'analyze.reply-sentiment', 'act.notify-rep-handoff')." },
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["active", "paused", "retired"], "description": "Whether the monitor is running. Paused monitors don't evaluate; retired monitors are kept for history." },
+
+    { "propertyName": "Linked Entity Key", "systemName": "custom_key_name", "type": "options", "autoSystem": false, "options": ["email", "website_url", "name", "record_id", "global"], "description": "What the monitor is scoped to. 'global' = org-wide; 'email' = specific contact; etc." },
+    { "propertyName": "Linked Entity Value", "systemName": "custom_key_value", "type": "text", "autoSystem": false, "description": "Value of the linked entity's key. Use memory_filter_by_property(type='monitor', custom_key_value=...) to find all monitors for an entity." },
+    { "propertyName": "Project", "systemName": "project", "type": "text", "autoSystem": false, "description": "Project / campaign this monitor belongs to, when applicable." },
+
+    { "propertyName": "Conditions", "systemName": "conditions", "type": "text", "autoSystem": false, "description": "JSON-encoded condition expression evaluated by the monitor runtime. Shape varies by Type — examples: { property: 'login_frequency', operator: 'lt', value: 3 } for threshold; { property: 'last_sync_at', operator: 'older_than', value: '24h' } for absence." },
+    { "propertyName": "Created By", "systemName": "created_by", "type": "text", "autoSystem": false, "description": "Who created the monitor. Conventions: '<operation_name>', 'human:<email>', 'webhook:<provider>'." },
+    { "propertyName": "Created At", "systemName": "created_at", "type": "date", "autoSystem": false, "description": "When the monitor was created." },
+    { "propertyName": "Last Checked", "systemName": "last_checked", "type": "date", "autoSystem": true, "description": "When the monitor last evaluated." },
+    { "propertyName": "Last Result", "systemName": "last_result", "type": "options", "autoSystem": true, "options": ["ok", "triggered", "error", "skipped"], "description": "Outcome of the last evaluation." },
+    { "propertyName": "Trigger Count", "systemName": "trigger_count", "type": "number", "autoSystem": true, "description": "Lifetime count of times this monitor has triggered. Useful for tuning noisy monitors." }
+  ]
+}

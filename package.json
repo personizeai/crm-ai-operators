@@ -1,0 +1,71 @@
+{
+  "name": "crm-ai-operators",
+  "version": "0.1.0",
+  "description": "Open pattern library that turns leading CRMs into AI-operable systems through Personize. HubSpot AI Operator is the first wedge; Salesforce is next.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/personizeai/crm-ai-operators.git"
+  },
+  "homepage": "https://github.com/personizeai/crm-ai-operators#readme",
+  "bugs": {
+    "url": "https://github.com/personizeai/crm-ai-operators/issues"
+  },
+  "keywords": [
+    "crm",
+    "hubspot",
+    "salesforce",
+    "ai-agent",
+    "personize",
+    "mcp",
+    "revenue-operations",
+    "gtm",
+    "outreach",
+    "automation"
+  ],
+  "files": [
+    "dist/adapters/",
+    "dist/core/",
+    "dist/mcp/",
+    "dist/scripts/",
+    "manifests/",
+    "skills/",
+    "docs/",
+    "AGENTS.md",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "crm-agent": "dist/scripts/crm-agent.js"
+  },
+  "scripts": {
+    "setup": "tsx src/scripts/crm-agent.ts setup apply",
+    "setup:diff": "tsx src/scripts/crm-agent.ts setup diff",
+    "setup:verify": "tsx src/scripts/crm-agent.ts setup verify",
+    "operate": "tsx src/scripts/crm-agent.ts operate",
+    "operation:list": "tsx src/scripts/crm-agent.ts operation list",
+    "pipeline": "tsx src/scripts/crm-agent.ts operation run",
+    "mcp": "tsx src/mcp/server.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "node --import tsx/esm --test src/__tests__/filter.test.ts src/__tests__/skip-if.test.ts src/__tests__/dates.test.ts src/__tests__/governance.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@personize/sdk": "^0.9.3",
+    "dotenv": "^16.4.0",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}
