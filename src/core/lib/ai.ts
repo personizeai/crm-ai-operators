@@ -180,43 +180,57 @@ export class AiPromptError extends Error {
 }
 
 // -----------------------------------------------------------------------------
-// aiPrompt — main entry. Routes to single-prompt or multi-step based on the
-// shape of `instructions`.
+// aiPrompt / aiSubagent — the two public verbs.
+//
+//   aiPrompt   → deterministic structured generation (governed memory on).
+//                Use for score.*, analyze.*, report.*, and generate.* extraction.
+//   aiSubagent → autonomous, tool-using run (agent tools on, governed memory off).
+//                Use for research.*, act.*, and any "plan → use tools → act" task.
+//
+// Both hit the same /api/v1/prompt endpoint and share this code path; they differ
+// only in which SDK verb is invoked (client.ai.prompt vs client.ai.subagent), which
+// flips the autonomy defaults server-side. Requires @personize/sdk >= 0.14.0.
 // -----------------------------------------------------------------------------
 
 export async function aiPrompt<T extends z.ZodTypeAny>(
   options: AiPromptOptions<T>,
 ): Promise<AiResult<z.infer<T>>> {
-  const sdkClient = client as any;
-  const ai = sdkClient.ai;
+  return runAi(options, "prompt");
+}
 
-  if (!ai || (typeof ai !== "function" && typeof ai.prompt !== "function")) {
-    // Legacy fallback path — the previous wrapper supported `client.generate`/`client.complete`
-    // shapes. Keep that compatibility; multi-step mode requires `ai.prompt`.
-    if (Array.isArray(options.instructions)) {
-      throw new AiPromptError(
-        "sdk_unavailable",
-        "Multi-step instructions require a Personize SDK version with `client.ai.prompt`. " +
-          "Update @personize/sdk or use single-string instructions.",
-      );
-    }
-    return runLegacySinglePrompt(options);
+export async function aiSubagent<T extends z.ZodTypeAny>(
+  options: AiPromptOptions<T>,
+): Promise<AiResult<z.infer<T>>> {
+  return runAi(options, "subagent");
+}
+
+async function runAi<T extends z.ZodTypeAny>(
+  options: AiPromptOptions<T>,
+  verb: "prompt" | "subagent",
+): Promise<AiResult<z.infer<T>>> {
+  const ai = (client as any).ai;
+  if (!ai || typeof ai[verb] !== "function") {
+    throw new AiPromptError(
+      "sdk_unavailable",
+      `client.ai.${verb} is not available. Update @personize/sdk to >= 0.14.0.`,
+    );
   }
 
   return Array.isArray(options.instructions)
-    ? runMultiStep(options, ai)
-    : runSinglePromptViaAiPrompt(options, ai);
+    ? runMultiStep(options, ai, verb)
+    : runSinglePrompt(options, ai, verb);
 }
 
 // -----------------------------------------------------------------------------
-// Single-prompt path (modern) — uses client.ai.prompt with `prompt` field
+// Single-prompt path — uses client.ai.{prompt|subagent} with the `prompt` field
 // -----------------------------------------------------------------------------
 
-async function runSinglePromptViaAiPrompt<T extends z.ZodTypeAny>(
+async function runSinglePrompt<T extends z.ZodTypeAny>(
   options: AiPromptOptions<T>,
   ai: any,
+  verb: "prompt" | "subagent",
 ): Promise<AiResult<z.infer<T>>> {
-  const fullPrompt = buildLegacyPrompt(options.context, options.instructions as string);
+  const fullPrompt = buildPrompt(options.context, options.instructions as string);
 
   const sdkOpts: Record<string, unknown> = {
     prompt: fullPrompt,
@@ -227,7 +241,7 @@ async function runSinglePromptViaAiPrompt<T extends z.ZodTypeAny>(
 
   let response: any;
   try {
-    response = await callAi(ai, sdkOpts);
+    response = await callAi(ai, sdkOpts, verb);
   } catch (error) {
     logger.error("AI prompt failed", { error: errMsg(error) });
     throw new AiPromptError("sdk_error", errMsg(error));
@@ -250,12 +264,13 @@ async function runSinglePromptViaAiPrompt<T extends z.ZodTypeAny>(
 }
 
 // -----------------------------------------------------------------------------
-// Multi-step path — uses client.ai.prompt with `instructions` array
+// Multi-step path — uses client.ai.{prompt|subagent} with `instructions` array
 // -----------------------------------------------------------------------------
 
 async function runMultiStep<T extends z.ZodTypeAny>(
   options: AiPromptOptions<T>,
   ai: any,
+  verb: "prompt" | "subagent",
 ): Promise<AiResult<z.infer<T>>> {
   if (!options.serverOutputs?.length) {
     throw new AiPromptError(
@@ -272,7 +287,7 @@ async function runMultiStep<T extends z.ZodTypeAny>(
 
   let response: any;
   try {
-    response = await callAi(ai, sdkOpts);
+    response = await callAi(ai, sdkOpts, verb);
   } catch (error) {
     logger.error("AI multi-step prompt failed", { error: errMsg(error) });
     throw new AiPromptError("sdk_error", errMsg(error));
@@ -297,59 +312,10 @@ async function runMultiStep<T extends z.ZodTypeAny>(
 }
 
 // -----------------------------------------------------------------------------
-// Legacy single-prompt path (for SDK shapes without `ai.prompt`)
-// -----------------------------------------------------------------------------
-
-async function runLegacySinglePrompt<T extends z.ZodTypeAny>(
-  options: AiPromptOptions<T>,
-): Promise<AiResult<z.infer<T>>> {
-  const sdkClient = client as any;
-  const ai = sdkClient.ai ?? sdkClient.generate ?? sdkClient.complete;
-
-  if (!ai) {
-    throw new AiPromptError(
-      "sdk_unavailable",
-      "Personize SDK has no AI generation interface (`client.ai`, `client.generate`, or `client.complete`). " +
-        "Update @personize/sdk to a version with generation support.",
-    );
-  }
-
-  const fullPrompt = buildLegacyPrompt(options.context, options.instructions as string);
-  const callOptions = {
-    temperature: options.temperature ?? 0.3,
-    maxTokens: options.maxTokens ?? 1000,
-    model: options.model,
-    responseFormat: "json" as const,
-  };
-
-  let raw: string;
-  try {
-    if (typeof ai === "function") {
-      const result = await ai(fullPrompt, callOptions);
-      raw = typeof result === "string" ? result : extractText(result);
-    } else if (typeof ai.generate === "function") {
-      const result = await ai.generate({ prompt: fullPrompt, ...callOptions });
-      raw = typeof result === "string" ? result : extractText(result);
-    } else if (typeof ai.complete === "function") {
-      const result = await ai.complete({ prompt: fullPrompt, ...callOptions });
-      raw = typeof result === "string" ? result : extractText(result);
-    } else {
-      throw new AiPromptError("sdk_unavailable", "Personize ai surface has no callable method");
-    }
-  } catch (error) {
-    if (error instanceof AiPromptError) throw error;
-    logger.error("AI prompt failed", { error: errMsg(error) });
-    throw new AiPromptError("sdk_error", errMsg(error));
-  }
-
-  return finalizeJsonOutput(options, raw, undefined);
-}
-
-// -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
 
-function buildLegacyPrompt(context: string | undefined, instructions: string): string {
+function buildPrompt(context: string | undefined, instructions: string): string {
   return context
     ? `${context}\n\n---\n\nReturn ONLY a JSON object matching the requested schema. No prose, no markdown fences.\n\n${instructions}`
     : `Return ONLY a JSON object matching the requested schema. No prose, no markdown fences.\n\n${instructions}`;
@@ -368,10 +334,13 @@ function attachCommonFields(sdkOpts: Record<string, unknown>, options: AiPromptO
   if (options.sessionId) sdkOpts.sessionId = options.sessionId;
 }
 
-async function callAi(ai: any, sdkOpts: Record<string, unknown>): Promise<any> {
-  if (typeof ai.prompt === "function") return ai.prompt(sdkOpts);
-  if (typeof ai === "function") return ai(sdkOpts);
-  throw new AiPromptError("sdk_unavailable", "client.ai.prompt is not a function");
+async function callAi(
+  ai: any,
+  sdkOpts: Record<string, unknown>,
+  verb: "prompt" | "subagent",
+): Promise<any> {
+  if (typeof ai[verb] === "function") return ai[verb](sdkOpts);
+  throw new AiPromptError("sdk_unavailable", `client.ai.${verb} is not a function`);
 }
 
 function finalizeServerOutputs<T extends z.ZodTypeAny>(

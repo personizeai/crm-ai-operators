@@ -37,7 +37,7 @@ export const researchContactBackground: OperationEntry = {
       [
         "Filter contacts via input.filter (default: ai_score >= 70 with stale background)",
         "For each contact: pull LinkedIn profile + recent public content via Tavily",
-        "Use aiPrompt with schema { title_history[], topics[], style_summary, recent_moves[], pain_signals[] }",
+        "Use aiSubagent (autonomous, tool-using) with schema { title_history[], topics[], style_summary, recent_moves[], pain_signals[] }",
         "Update title-history entries only when newer than current; append style/pain_points",
         "Cite sources in notes; respect privacy — no scraping of private content",
       ],

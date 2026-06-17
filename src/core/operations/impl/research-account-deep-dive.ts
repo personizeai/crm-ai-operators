@@ -38,7 +38,7 @@ export const researchAccountDeepDive: OperationEntry = {
         "Filter target accounts via input.filter (default tier A or B accounts with stale context)",
         "For each account: load companies record + governance + recent signals",
         "Call Tavily/web search for funding, news, leadership; call LinkedIn for stakeholder map (consider 'lib/research-providers.ts')",
-        "Use aiPrompt with a schema { summary, facts[], signals[], stakeholders[], next_action } to structure findings",
+        "Use aiSubagent (autonomous, tool-using) with a schema { summary, facts[], signals[], stakeholders[], next_action } to research and structure findings",
         "Persist: companies.context = summary, batch-store signals, batch-store stakeholders as contacts (with crm_object_type='lead')",
         "Append a workspace.updates entry per account; cite sources in companies.notes",
       ],
