@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { client } from "../../config.js";
+import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { addBusinessDays, isoDate } from "../../lib/dates.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
@@ -54,45 +54,25 @@ interface CompanyRecord {
 
 async function listContacts(filter: Filter): Promise<ContactRecord[]> {
   const compiled = compileFilter(filter);
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) {
-    logger.warn("Personize SDK has no memory.filterByProperty; cannot list contacts");
-    return [];
-  }
-  const response = await memory.filterByProperty({
+  return (await retrieveRecords({
     type: "contact",
     conditions: compiled.conditions,
     logic: compiled.logic,
     limit: compiled.limit,
-  });
-  return (response?.data ?? response?.records ?? []) as ContactRecord[];
+  })) as ContactRecord[];
 }
 
 async function getCompany(domain: string): Promise<CompanyRecord | null> {
-  const memory = (client as any).memory;
-  if (!memory?.retrieve) return null;
-  try {
-    const result = await memory.retrieve({ website_url: domain, type: "company" });
-    return (result?.data ?? null) as CompanyRecord | null;
-  } catch {
-    return null;
-  }
+  return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as CompanyRecord | null;
 }
 
 async function getPastEngagement(email: string): Promise<unknown[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "conversation",
-      conditions: [{ propertyName: "contact_email", operator: "equals", value: email }],
-      logic: "AND",
-      limit: 10,
-    });
-    return (response?.data ?? response?.records ?? []) as unknown[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "conversation",
+    conditions: [{ propertyName: "contact_email", operator: "equals", value: email }],
+    logic: "AND",
+    limit: 10,
+  })) as unknown[];
 }
 
 export const generateWinBackSequence: OperationEntry = {

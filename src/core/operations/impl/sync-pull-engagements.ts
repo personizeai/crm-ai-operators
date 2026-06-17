@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -43,29 +44,19 @@ const PROCESSABLE_TYPES = new Set(["email", "call", "meeting", "note"]);
 const PROCESSOR_TAG = "sync.pull-engagements";
 
 async function getUnprocessedEngagements(): Promise<ConversationRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) {
-    logger.warn("Personize SDK has no memory.filterByProperty; cannot load engagements");
-    return [];
-  }
-  try {
-    // Pull recent conversations — filter to unprocessed in-code
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const response = await memory.filterByProperty({
-      type: "conversation",
-      conditions: [{ propertyName: "sent_at", operator: "gte", value: since }],
-      logic: "AND",
-      limit: 100,
-    });
-    const all = (response?.data ?? response?.records ?? []) as ConversationRecord[];
-    return all.filter((c) => {
-      if (!PROCESSABLE_TYPES.has(c.type ?? "")) return false;
-      const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
-      return !processed.includes(PROCESSOR_TAG);
-    });
-  } catch {
-    return [];
-  }
+  // Pull recent conversations — filter to unprocessed in-code
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const all = (await retrieveRecords({
+    type: "conversation",
+    conditions: [{ propertyName: "sent_at", operator: "gte", value: since }],
+    logic: "AND",
+    limit: 100,
+  })) as ConversationRecord[];
+  return all.filter((c) => {
+    if (!PROCESSABLE_TYPES.has(c.type ?? "")) return false;
+    const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
+    return !processed.includes(PROCESSOR_TAG);
+  });
 }
 
 async function appendBuyingSignal(contactEmail: string, signal: string, conversationId: string): Promise<void> {

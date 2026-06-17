@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -56,19 +57,12 @@ interface CandidatePair {
 }
 
 async function getAllContacts(): Promise<ContactRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "contact",
-      conditions: [],
-      logic: "AND",
-      limit: 1000,
-    });
-    return (response?.data ?? response?.records ?? []) as ContactRecord[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "contact",
+    conditions: [],
+    logic: "AND",
+    limit: 1000,
+  })) as ContactRecord[];
 }
 
 function findCandidatePairs(contacts: ContactRecord[], threshold = 0.75): CandidatePair[] {

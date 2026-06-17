@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -45,36 +46,22 @@ interface ContactRecord {
 const DEAL_STAGES = new Set(["MQL", "SQL", "Opportunity", "Vendor Evaluating", "Decision", "salesqualifiedlead", "opportunity"]);
 
 async function getActiveDeals(): Promise<ContactRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "contact",
-      conditions: [{ propertyName: "ai_score", operator: "gte", value: 40 }],
-      logic: "AND",
-      limit: 300,
-    });
-    return (response?.data ?? response?.records ?? []) as ContactRecord[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "contact",
+    conditions: [{ propertyName: "ai_score", operator: "gte", value: 40 }],
+    logic: "AND",
+    limit: 300,
+  })) as ContactRecord[];
 }
 
 async function getRecentSignals(): Promise<unknown[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-    const response = await memory.filterByProperty({
-      type: "signal",
-      conditions: [{ propertyName: "observed_at", operator: "gte", value: since }],
-      logic: "AND",
-      limit: 200,
-    });
-    return (response?.data ?? response?.records ?? []) as unknown[];
-  } catch {
-    return [];
-  }
+  const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  return (await retrieveRecords({
+    type: "signal",
+    conditions: [{ propertyName: "observed_at", operator: "gte", value: since }],
+    logic: "AND",
+    limit: 200,
+  })) as unknown[];
 }
 
 async function storeReport(reportId: string, name: string, content: string): Promise<void> {

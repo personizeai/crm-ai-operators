@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { logger } from "../../lib/logger.js";
 import type { OperationEntry } from "../types.js";
@@ -53,24 +53,11 @@ interface OperationStats {
 
 async function loadRecentRuns(daysBack: number): Promise<RunRecord[]> {
   const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) {
-    logger.warn("Personize SDK has no memory.filterByProperty; cannot load operation runs");
-    return [];
-  }
-  try {
-    const response = await memory.filterByProperty({
-      type: "operation_runs",
-      conditions: [{ propertyName: "started_at", operator: "gte", value: since }],
-      limit: 200,
-    });
-    return (response?.data ?? response?.records ?? []) as RunRecord[];
-  } catch (error) {
-    logger.warn("Failed to load operation runs", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "operation_runs",
+    conditions: [{ propertyName: "started_at", operator: "gte", value: since }],
+    limit: 200,
+  })) as RunRecord[];
 }
 
 function computeStats(runs: RunRecord[]): OperationStats[] {

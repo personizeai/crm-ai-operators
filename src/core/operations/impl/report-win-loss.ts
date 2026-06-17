@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -36,39 +37,25 @@ interface CompanyRecord {
 }
 
 async function getAccountsByOutcome(stages: string[]): Promise<CompanyRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
   const results: CompanyRecord[] = [];
   for (const stage of stages) {
-    try {
-      const response = await memory.filterByProperty({
-        type: "company",
-        conditions: [{ propertyName: "lifecycle_stage", operator: "equals", value: stage }],
-        logic: "AND",
-        limit: 100,
-      });
-      results.push(...((response?.data ?? response?.records ?? []) as CompanyRecord[]));
-    } catch {
-      // Skip missing stages
-    }
+    results.push(...((await retrieveRecords({
+      type: "company",
+      conditions: [{ propertyName: "lifecycle_stage", operator: "equals", value: stage }],
+      logic: "AND",
+      limit: 100,
+    })) as CompanyRecord[]));
   }
   return results;
 }
 
 async function getChampionsForDomain(domain: string): Promise<unknown[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "contact",
-      conditions: [{ propertyName: "company_domain", operator: "equals", value: domain }],
-      logic: "AND",
-      limit: 5,
-    });
-    return (response?.data ?? response?.records ?? []) as unknown[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "contact",
+    conditions: [{ propertyName: "company_domain", operator: "equals", value: domain }],
+    logic: "AND",
+    limit: 5,
+  })) as unknown[];
 }
 
 async function storeReport(reportId: string, name: string, content: string): Promise<void> {

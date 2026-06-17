@@ -1,5 +1,6 @@
 import { client } from "../../config.js";
 import { logger } from "../../lib/logger.js";
+import { retrieveRecords, countRecords } from "../../lib/recall.js";
 import { workspace } from "../../lib/workspace.js";
 import type { OperationEntry } from "../types.js";
 
@@ -27,57 +28,31 @@ interface ContactRecord {
 }
 
 async function getAllCompaniesWithScore(): Promise<CompanyRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "company",
-      conditions: [{ propertyName: "icp_fit_score", operator: "exists", value: true }],
-      logic: "AND",
-      limit: 500,
-    });
-    return (response?.data ?? response?.records ?? []) as CompanyRecord[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "company",
+    conditions: [{ propertyName: "icp_fit_score", operator: "exists", value: true }],
+    logic: "AND",
+    limit: 500,
+  })) as CompanyRecord[];
 }
 
 async function getContactsByDomain(domain: string): Promise<ContactRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "contact",
-      conditions: [{ propertyName: "company_domain", operator: "equals", value: domain }],
-      logic: "AND",
-      limit: 200,
-    });
-    return (response?.data ?? response?.records ?? []) as ContactRecord[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "contact",
+    conditions: [{ propertyName: "company_domain", operator: "equals", value: domain }],
+    logic: "AND",
+    limit: 200,
+  })) as ContactRecord[];
 }
 
 async function getCoverageStats(): Promise<{ total: number; with_ai_score: number; with_buying_stage: number; with_next_best_action: number }> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return { total: 0, with_ai_score: 0, with_buying_stage: 0, with_next_best_action: 0 };
-
-  const [totalRes, scoreRes, stageRes, actionRes] = await Promise.allSettled([
-    memory.filterByProperty({ type: "contact", conditions: [], logic: "AND", limit: 1 }),
-    memory.filterByProperty({ type: "contact", conditions: [{ propertyName: "ai_score", operator: "exists", value: true }], logic: "AND", limit: 1 }),
-    memory.filterByProperty({ type: "contact", conditions: [{ propertyName: "buying_stage", operator: "exists", value: true }], logic: "AND", limit: 1 }),
-    memory.filterByProperty({ type: "contact", conditions: [{ propertyName: "next_best_action", operator: "exists", value: true }], logic: "AND", limit: 1 }),
+  const [total, with_ai_score, with_buying_stage, with_next_best_action] = await Promise.all([
+    countRecords({ type: "contact" }),
+    countRecords({ type: "contact", conditions: [{ propertyName: "ai_score", operator: "exists", value: true }] }),
+    countRecords({ type: "contact", conditions: [{ propertyName: "buying_stage", operator: "exists", value: true }] }),
+    countRecords({ type: "contact", conditions: [{ propertyName: "next_best_action", operator: "exists", value: true }] }),
   ]);
-
-  const count = (res: PromiseSettledResult<unknown>) =>
-    res.status === "fulfilled" ? ((res.value as { total?: number; count?: number } | null)?.total ?? (res.value as { total?: number; count?: number } | null)?.count ?? 0) : 0;
-
-  return {
-    total: count(totalRes),
-    with_ai_score: count(scoreRes),
-    with_buying_stage: count(stageRes),
-    with_next_best_action: count(actionRes),
-  };
+  return { total, with_ai_score, with_buying_stage, with_next_best_action };
 }
 
 export const syncPushProperties: OperationEntry = {

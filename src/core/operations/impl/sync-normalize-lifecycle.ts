@@ -1,4 +1,5 @@
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { logger } from "../../lib/logger.js";
 import { workspace } from "../../lib/workspace.js";
 import type { OperationEntry } from "../types.js";
@@ -52,19 +53,12 @@ interface PersonizeRecord {
 }
 
 async function loadAll(type: "contact" | "company"): Promise<PersonizeRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type,
-      conditions: [{ propertyName: "lifecycle_stage", operator: "exists", value: true }],
-      logic: "AND",
-      limit: 1000,
-    });
-    return (response?.data ?? response?.records ?? []) as PersonizeRecord[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type,
+    conditions: [{ propertyName: "lifecycle_stage", operator: "exists", value: true }],
+    logic: "AND",
+    limit: 1000,
+  })) as PersonizeRecord[];
 }
 
 export const syncNormalizeLifecycle: OperationEntry = {

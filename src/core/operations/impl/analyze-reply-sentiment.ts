@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -69,26 +70,19 @@ const SEQUENCE_STATUS_MAP: Record<ReplyClassValue, string> = {
 };
 
 async function getUnprocessedReplies(): Promise<ConversationRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "conversation",
-      conditions: [
-        { propertyName: "direction", operator: "equals", value: "inbound" },
-        { propertyName: "type", operator: "equals", value: "email" },
-      ],
-      logic: "AND",
-      limit: 50,
-    });
-    const all = (response?.data ?? response?.records ?? []) as ConversationRecord[];
-    return all.filter((c) => {
-      const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
-      return !processed.includes("analyze.reply-sentiment");
-    });
-  } catch {
-    return [];
-  }
+  const all = (await retrieveRecords({
+    type: "conversation",
+    conditions: [
+      { propertyName: "direction", operator: "equals", value: "inbound" },
+      { propertyName: "type", operator: "equals", value: "email" },
+    ],
+    logic: "AND",
+    limit: 50,
+  })) as ConversationRecord[];
+  return all.filter((c) => {
+    const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
+    return !processed.includes("analyze.reply-sentiment");
+  });
 }
 
 async function appendSignal(contactEmail: string, classification: z.infer<typeof ClassificationSchema>): Promise<void> {

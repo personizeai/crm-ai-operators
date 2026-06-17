@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -38,43 +39,29 @@ interface CompanyRecord {
 }
 
 async function getAccountsByStage(stages: string[]): Promise<CompanyRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
   const results: CompanyRecord[] = [];
   for (const stage of stages) {
-    try {
-      const response = await memory.filterByProperty({
-        type: "company",
-        conditions: [{ propertyName: "lifecycle_stage", operator: "equals", value: stage }],
-        logic: "AND",
-        limit: 75,
-      });
-      results.push(...((response?.data ?? response?.records ?? []) as CompanyRecord[]));
-    } catch {
-      // Skip
-    }
+    results.push(...((await retrieveRecords({
+      type: "company",
+      conditions: [{ propertyName: "lifecycle_stage", operator: "equals", value: stage }],
+      logic: "AND",
+      limit: 75,
+    })) as CompanyRecord[]));
   }
   return results;
 }
 
 async function getChampionProfile(domain: string): Promise<Record<string, unknown> | null> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return null;
-  try {
-    const response = await memory.filterByProperty({
-      type: "contact",
-      conditions: [
-        { propertyName: "company_domain", operator: "equals", value: domain },
-        { propertyName: "ai_score", operator: "gte", value: 60 },
-      ],
-      logic: "AND",
-      limit: 3,
-    });
-    const contacts = (response?.data ?? response?.records ?? []) as Record<string, unknown>[];
-    return contacts[0] ?? null;
-  } catch {
-    return null;
-  }
+  const contacts = (await retrieveRecords({
+    type: "contact",
+    conditions: [
+      { propertyName: "company_domain", operator: "equals", value: domain },
+      { propertyName: "ai_score", operator: "gte", value: 60 },
+    ],
+    logic: "AND",
+    limit: 3,
+  })) as Record<string, unknown>[];
+  return contacts[0] ?? null;
 }
 
 async function storeRefinement(id: string, name: string, content: string): Promise<void> {

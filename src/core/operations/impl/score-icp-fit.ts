@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
@@ -37,22 +38,12 @@ interface CompanyRecord {
 
 async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
   const compiled = compileFilter(filter);
-  const memory = (client as any).memory;
-
-  if (!memory || typeof memory.filterByProperty !== "function") {
-    logger.warn("Personize SDK has no memory.filterByProperty; cannot list companies");
-    return [];
-  }
-
-  const response = await memory.filterByProperty({
+  return (await retrieveRecords({
     type: "company",
     conditions: compiled.conditions,
     logic: compiled.logic,
     limit: compiled.limit,
-  });
-
-  const records = (response?.data ?? response?.records ?? []) as CompanyRecord[];
-  return records;
+  })) as CompanyRecord[];
 }
 
 async function writeScoreBack(

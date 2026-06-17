@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
@@ -43,52 +44,36 @@ interface ContactRecord {
 
 async function listContacts(filter: Filter): Promise<ContactRecord[]> {
   const compiled = compileFilter(filter);
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) {
-    logger.warn("Personize SDK has no memory.filterByProperty; cannot list contacts");
-    return [];
-  }
-  const response = await memory.filterByProperty({
+  return (await retrieveRecords({
     type: "contact",
     conditions: compiled.conditions,
     logic: compiled.logic,
     limit: compiled.limit,
-  });
-  return (response?.data ?? response?.records ?? []) as ContactRecord[];
+  })) as ContactRecord[];
 }
 
 async function getRecentActivity(email: string): Promise<{ conversations: unknown[]; signals: unknown[] }> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return { conversations: [], signals: [] };
-
   const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const emailCondition = { propertyName: "contact_email", operator: "equals", value: email };
   const sinceCondition = { propertyName: "observed_at", operator: "gte", value: since };
   const sentSinceCondition = { propertyName: "sent_at", operator: "gte", value: since };
 
-  const [convResponse, sigResponse] = await Promise.allSettled([
-    memory.filterByProperty({
+  const [conversations, signals] = await Promise.all([
+    retrieveRecords({
       type: "conversation",
       conditions: [emailCondition, sentSinceCondition],
       logic: "AND",
       limit: 20,
-    }),
-    memory.filterByProperty({
+    }) as Promise<unknown[]>,
+    retrieveRecords({
       type: "signal",
       conditions: [emailCondition, sinceCondition],
       logic: "AND",
       limit: 10,
-    }),
+    }) as Promise<unknown[]>,
   ]);
 
-  return {
-    conversations: convResponse.status === "fulfilled"
-      ? ((convResponse.value?.data ?? convResponse.value?.records ?? []) as unknown[])
-      : [],
-    signals: sigResponse.status === "fulfilled"
-      ? ((sigResponse.value?.data ?? sigResponse.value?.records ?? []) as unknown[])
-      : [],
-  };
+  return { conversations, signals };
 }
 
 export const analyzeBuyingStage: OperationEntry = {

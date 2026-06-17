@@ -1,4 +1,4 @@
-import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
 import { todayIso } from "../../lib/dates.js";
@@ -35,36 +35,22 @@ const SEVERITY_WEIGHT: Record<string, number> = {
 };
 
 async function getAllActiveContacts(): Promise<ContactRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const response = await memory.filterByProperty({
-      type: "contact",
-      conditions: [{ propertyName: "ai_score", operator: "exists", value: true }],
-      logic: "AND",
-      limit: 500,
-    });
-    return (response?.data ?? response?.records ?? []) as ContactRecord[];
-  } catch {
-    return [];
-  }
+  return (await retrieveRecords({
+    type: "contact",
+    conditions: [{ propertyName: "ai_score", operator: "exists", value: true }],
+    logic: "AND",
+    limit: 500,
+  })) as ContactRecord[];
 }
 
 async function getRecentSignals(): Promise<SignalRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const response = await memory.filterByProperty({
-      type: "signal",
-      conditions: [{ propertyName: "observed_at", operator: "gte", value: since }],
-      logic: "AND",
-      limit: 1000,
-    });
-    return (response?.data ?? response?.records ?? []) as SignalRecord[];
-  } catch {
-    return [];
-  }
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return (await retrieveRecords({
+    type: "signal",
+    conditions: [{ propertyName: "observed_at", operator: "gte", value: since }],
+    logic: "AND",
+    limit: 1000,
+  })) as SignalRecord[];
 }
 
 async function postToSlack(webhookUrl: string, text: string): Promise<boolean> {

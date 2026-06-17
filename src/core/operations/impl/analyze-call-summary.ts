@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { client } from "../../config.js";
+import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -36,45 +37,32 @@ interface ConversationRecord {
 }
 
 async function getUnprocessedCalls(): Promise<ConversationRecord[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const [callResponse, meetingResponse] = await Promise.allSettled([
-      memory.filterByProperty({
-        type: "conversation",
-        conditions: [
-          { propertyName: "type", operator: "equals", value: "call" },
-          { propertyName: "sent_at", operator: "gte", value: since },
-        ],
-        logic: "AND",
-        limit: 50,
-      }),
-      memory.filterByProperty({
-        type: "conversation",
-        conditions: [
-          { propertyName: "type", operator: "equals", value: "meeting" },
-          { propertyName: "sent_at", operator: "gte", value: since },
-        ],
-        logic: "AND",
-        limit: 50,
-      }),
-    ]);
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const [calls, meetings] = await Promise.all([
+    retrieveRecords({
+      type: "conversation",
+      conditions: [
+        { propertyName: "type", operator: "equals", value: "call" },
+        { propertyName: "sent_at", operator: "gte", value: since },
+      ],
+      logic: "AND",
+      limit: 50,
+    }) as Promise<ConversationRecord[]>,
+    retrieveRecords({
+      type: "conversation",
+      conditions: [
+        { propertyName: "type", operator: "equals", value: "meeting" },
+        { propertyName: "sent_at", operator: "gte", value: since },
+      ],
+      logic: "AND",
+      limit: 50,
+    }) as Promise<ConversationRecord[]>,
+  ]);
 
-    const calls = callResponse.status === "fulfilled"
-      ? ((callResponse.value?.data ?? callResponse.value?.records ?? []) as ConversationRecord[])
-      : [];
-    const meetings = meetingResponse.status === "fulfilled"
-      ? ((meetingResponse.value?.data ?? meetingResponse.value?.records ?? []) as ConversationRecord[])
-      : [];
-
-    return [...calls, ...meetings].filter((c) => {
-      const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
-      return !processed.includes(PROCESSOR_TAG);
-    });
-  } catch {
-    return [];
-  }
+  return [...calls, ...meetings].filter((c) => {
+    const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
+    return !processed.includes(PROCESSOR_TAG);
+  });
 }
 
 async function appendSignal(contactEmail: string, signal: string): Promise<void> {

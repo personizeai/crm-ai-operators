@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { client } from "../../config.js";
+import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -21,65 +21,37 @@ const BriefOutputSchema = z.object({
 });
 
 async function getContact(email: string): Promise<Record<string, unknown> | null> {
-  const memory = (client as any).memory;
-  if (!memory?.retrieve) return null;
-  try {
-    const result = await memory.retrieve({ email, type: "contact" });
-    return (result?.data ?? null) as Record<string, unknown> | null;
-  } catch {
-    return null;
-  }
+  return (await retrieveRecord({ email, type: "contact" })) as Record<string, unknown> | null;
 }
 
 async function getCompany(domain: string): Promise<Record<string, unknown> | null> {
-  const memory = (client as any).memory;
-  if (!memory?.retrieve) return null;
-  try {
-    const result = await memory.retrieve({ website_url: domain, type: "company" });
-    return (result?.data ?? null) as Record<string, unknown> | null;
-  } catch {
-    return null;
-  }
+  return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as Record<string, unknown> | null;
 }
 
 async function getRecentConversations(email: string): Promise<unknown[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-    const response = await memory.filterByProperty({
-      type: "conversation",
-      conditions: [
-        { propertyName: "contact_email", operator: "equals", value: email },
-        { propertyName: "sent_at", operator: "gte", value: since },
-      ],
-      logic: "AND",
-      limit: 15,
-    });
-    return (response?.data ?? response?.records ?? []) as unknown[];
-  } catch {
-    return [];
-  }
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  return (await retrieveRecords({
+    type: "conversation",
+    conditions: [
+      { propertyName: "contact_email", operator: "equals", value: email },
+      { propertyName: "sent_at", operator: "gte", value: since },
+    ],
+    logic: "AND",
+    limit: 15,
+  })) as unknown[];
 }
 
 async function getRecentSignals(email: string): Promise<unknown[]> {
-  const memory = (client as any).memory;
-  if (!memory?.filterByProperty) return [];
-  try {
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const response = await memory.filterByProperty({
-      type: "signal",
-      conditions: [
-        { propertyName: "contact_email", operator: "equals", value: email },
-        { propertyName: "observed_at", operator: "gte", value: since },
-      ],
-      logic: "AND",
-      limit: 8,
-    });
-    return (response?.data ?? response?.records ?? []) as unknown[];
-  } catch {
-    return [];
-  }
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  return (await retrieveRecords({
+    type: "signal",
+    conditions: [
+      { propertyName: "contact_email", operator: "equals", value: email },
+      { propertyName: "observed_at", operator: "gte", value: since },
+    ],
+    logic: "AND",
+    limit: 8,
+  })) as unknown[];
 }
 
 export const generateMeetingBrief: OperationEntry = {
