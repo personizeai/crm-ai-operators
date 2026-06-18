@@ -12,13 +12,17 @@ export const setupDiff: OperationEntry = {
   run: async (_input, context) => {
     const { applyManifests } = await import("../../setup/apply-manifests.js");
     const result = await applyManifests({ dryRun: true, crm: context.crm });
+    const cp = result.crmProperties;
+    const crmSummary = cp
+      ? ` ${cp.created} personize_* CRM prop(s) would be provisioned${cp.manual ? `, ${cp.manual} manual (Salesforce)` : ""}.`
+      : "";
     return {
       ok: true,
       runId: context.runId,
       operation: "setup.diff",
       dryRun: true,
       status: "live",
-      summary: `Diff: ${result.collections} collection change(s), ${result.guidelines} guideline upsert(s) would be applied.`,
+      summary: `Diff: ${result.collections} collection change(s), ${result.guidelines} guideline upsert(s) would be applied.${crmSummary}`,
       metrics: { ...result, dry_run_forced: true },
     };
   },

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
 import type { CrmId } from "../operations/types.js";
+import { applyCrmProperties, type ApplyCrmPropertiesResult } from "./apply-crm-properties.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 
@@ -25,6 +26,19 @@ const CollectionPropertySchema = z.object({
   options: z.array(z.string()).optional(),
   description: z.string().optional(),
   updateSemantics: z.enum(["replace", "append"]).optional(),
+  /**
+   * Provenance of the value — how Personize populates it. Orthogonal to writeback.
+   *   inferred  → LLM-derived (scores, stages, sentiment, next best action)
+   *   extracted → structured data from public sources / normalization (industry, seniority, headcount)
+   *   crm       → originated in the connected CRM (email, domain, record id) — never written back
+   */
+  source: z.enum(["inferred", "extracted", "crm"]).optional(),
+  /**
+   * When true, `setup` provisions a matching `personize_<systemName>` custom
+   * property on the connected CRM object. This — not `autoSystem` — gates CRM
+   * writeback, so structured `extracted` fields (e.g. employee_count) sync too.
+   */
+  writeback: z.boolean().optional(),
 });
 
 const CollectionManifestSchema = z.object({
@@ -162,6 +176,8 @@ export async function applyManifests(options: ApplyOptions) {
     dryRun,
   );
 
+  let crmProperties: ApplyCrmPropertiesResult | undefined;
+
   if (crm) {
     collections += await applyCollectionsFromDir(
       path.join(MANIFEST_DIR, crm, "collections"),
@@ -171,7 +187,11 @@ export async function applyManifests(options: ApplyOptions) {
       path.join(MANIFEST_DIR, crm, "guidelines"),
       dryRun,
     );
+
+    // Provision the personize_* custom properties on the connected CRM. Driven
+    // by the writeback:true flags in the contacts/companies manifests.
+    crmProperties = await applyCrmProperties({ crm, dryRun });
   }
 
-  return { collections, guidelines };
+  return { collections, guidelines, crmProperties };
 }
