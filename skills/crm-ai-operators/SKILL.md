@@ -64,6 +64,17 @@ Sort by `priority` descending, `due_date` ascending. Each task's `task_type` tel
 
 When done with a task: update `status` to `done`/`cancelled`/`declined`, set `completed_at` and `outcome`, and append a corresponding entry to the linked entity's `workspace.updates`.
 
+## Execution modes: `prompt` vs `subagent`
+
+Operations run on one of two governed verbs. You don't pick them directly — each operation already uses the right one — but understanding the distinction helps you reason about cost and behavior:
+
+- **`prompt`** — deterministic, single governed call returning structured output. Powers `score.*`, `analyze.*`, `report.*`.
+- **`subagent`** — autonomous, tool-using run that plans and acts across steps. Powers `research.*` and multi-tool `generate.*` / `act.*`.
+
+Constraints:
+- **MUST** prefer the operation that already encodes the right mode over hand-rolling a raw prompt — because operations carry the governance, memory grounding, and audit wiring that a bare call lacks.
+- **SHOULD** expect `subagent`-backed operations to cost more and take longer than `prompt`-backed ones — because they run a multi-step tool loop; surface that to the user before running large batches.
+
 ## Hard rules
 
 1. **CRM access goes through the operation runner**, not raw fetch. The operations wrap the Personize CRM Passthrough; you should not call HubSpot or Salesforce APIs directly.

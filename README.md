@@ -1,12 +1,29 @@
 # CRM Agent Operating System
 
-**The pattern library that gives your AI agents superpowers inside HubSpot and Salesforce.**
+**Save your revenue team hundreds of hours and thousands of dollars — automated, inside your CRM.**
+
+Connect HubSpot or Salesforce to Personize, and AI agents start scoring, enriching, and writing intelligence back into your CRM on day one — governed, audited, and grounded in your data.
+
+---
+
+## The economic case
+
+One AI agent running five operations from this repo replaces **2–3 RevOps hours per day** of manual scoring, enrichment, research, and CRM hygiene. At scale, teams report offsetting **5–10 FTE-equivalent** of sales-ops, marketing-ops, and AE-support capacity — while *improving* data quality and shrinking CRM debt instead of adding to it.
+
+| Done by hand today | With the CRM Agent OS |
+|---|---|
+| AE researches each account before a call (20–40 min) | Brief generated from CRM + web in seconds |
+| Ops scores and tiers leads in spreadsheets | Every contact/company scored continuously, written back to the CRM |
+| Reps guess the next step | `personize_next_best_action` on every record |
+| Enrichment data pasted in manually | Firmographics + signals synced as `personize_*` fields |
+
+The point isn't "AI in your CRM." It's **hours back and dollars saved**, with an audit trail.
 
 ---
 
 ## One sentence
 
-Personize is the memory and governance layer that turns generic AI agents into CRM-native operators — agents that know your contacts, follow your policies, and write back to your CRM automatically.
+Personize is the memory and governance layer that turns generic AI agents into CRM-native operators — agents that know your contacts, follow your policies, and write `personize_*` intelligence back to your CRM automatically.
 
 ---
 
@@ -48,11 +65,36 @@ app.personize.ai/hubspot
 2. Connect HubSpot (one OAuth click)
 3. Done
 
-In the background, Personize builds a **live two-way sync** between your HubSpot contacts and companies and a governed Personize memory layer — with 15 enriched AI properties pre-configured (ICP score, buying stage, next best action, win probability, and more).
+In the background, Personize builds a **live two-way sync** between your HubSpot/Salesforce contacts and companies and a governed Personize memory layer. Then `setup` provisions the **`personize_*` custom properties** on your CRM objects — so the AI scores, stages, and enrichment land in fields your reps already see, namespaced so they never collide with your existing data.
+
+```bash
+crm-agent setup apply --crm hubspot     # creates collections, guidelines, AND the personize_* CRM fields
+crm-agent setup diff  --crm hubspot     # dry-run: shows exactly which personize_* fields would be created
+```
 
 When you land on your dashboard you'll see: *"1,247 contacts and 312 companies are ready for your AI agents."*
 
 Your agents can start working on day one. No CSV exports. No prompt engineering for field names. No worrying about audit trails.
+
+---
+
+## What gets created in your CRM
+
+`setup` provisions one namespaced custom property per writeback-flagged field (HubSpot group **Personize**; Salesforce `Personize_*__c`). Two provenances ship to the CRM — **inferred** (LLM-derived) and **extracted** (structured data from public sources / normalization) — while CRM-origin keys and internal append-logs stay Personize-side.
+
+| CRM field | On | Provenance | What it is |
+|---|---|---|---|
+| `personize_ai_score` / `personize_ai_score_reason` | Contacts | inferred | 0–100 lead score + one-line reason |
+| `personize_buying_stage` | Contacts | inferred | Inferred buying stage |
+| `personize_next_best_action` | Contacts & Companies | inferred | Recommended next step |
+| `personize_sentiment` / `personize_communication_style` | Contacts | inferred | How they feel / how to write to them |
+| `personize_seniority` / `personize_function` / `personize_job_title` | Contacts | extracted | Normalized role data |
+| `personize_icp_fit_score` / `personize_account_score` (+ reasons) | Companies | inferred | Account fit & priority scores |
+| `personize_industry` / `personize_business_model` / `personize_company_size_band` | Companies | extracted | Firmographics |
+| `personize_employee_count` | Companies | extracted | Headcount — structured enrichment, written back even though it isn't LLM-generated |
+| `personize_lifecycle_stage` / `personize_signal_strength` / `personize_last_signal` | Companies | inferred | Account state |
+
+Writeback is gated by an explicit `writeback` flag in the collection manifests — *not* by whether a field is AI-generated — so extracted/enriched data syncs alongside inferred scores. 22 fields in total (10 contact, 12 company).
 
 ---
 
@@ -223,11 +265,11 @@ import { hubspot } from "./src/adapters/hubspot/adapter.js";
 // List contacts
 const page = await hubspot.contacts.list({ limit: 100, properties: ["email", "lifecyclestage"] });
 
-// Update a contact
+// Update a contact — write the namespaced personize_* fields setup provisioned
 await hubspot.contacts.update(id, {
-  ai_score: "87",
-  ai_score_reason: "VP title, 500+ employees, recent pricing page visit",
-  buying_stage: "evaluation",
+  personize_ai_score: "87",
+  personize_ai_score_reason: "VP title, 500+ employees, recent pricing page visit",
+  personize_buying_stage: "Vendor Evaluating",
 });
 ```
 
@@ -245,7 +287,18 @@ const leads = await salesforce.query<Lead>(
 await salesforce.sobject("Contact").create({ LastName: "Smith", Email: "smith@acme.com" });
 ```
 
-Adding a new CRM: implement the `CrmAdapter` interface in `src/adapters/` — the core runtime, audit log, and governance layer are CRM-agnostic.
+Adding a new CRM: implement the `CrmAdapter` interface in `src/adapters/` — the core runtime, audit log, and governance layer are CRM-agnostic. CRM calls route through the Personize SDK's native passthrough (`client.hubspot.*` / `client.salesforce.*`), so OAuth, token refresh, rate limiting, and audit are handled for you.
+
+---
+
+## Two ways agents think: `prompt` vs `subagent`
+
+Operations call one of two verbs, both backed by Personize governance and memory:
+
+- **`prompt`** — *deterministic.* One governed call that returns structured output (a score, a classification, a drafted email). Used by `score.*`, `analyze.*`, `report.*`. Predictable and cheap.
+- **`subagent`** — *autonomous.* The model plans, calls tools, and acts across multiple steps ("research this account, enrich the record, draft the outreach"). Used by `research.*` and multi-tool `generate.*`/`act.*`.
+
+Same endpoint, same governance — `subagent` just turns on the agent toolset. Reach for `prompt` when you know exactly what you want back; reach for `subagent` when the agent needs to figure out the steps itself.
 
 ---
 

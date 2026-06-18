@@ -3,6 +3,8 @@
 > Authoritative guide for writing `client.ai.prompt({ instructions: [...] })` calls. Covers (a) when to use multi-step, (b) framework runtime behavior the author can't change, (c) authoring rules, (d) context-wiring conventions, (e) 14 patterns across two tiers, (f) four error-handling tiers with an inline cookbook, and (g) response shapes and anti-patterns.
 >
 > Companion to [AI-INSTRUCTIONS.md](AI-INSTRUCTIONS.md) (full `PromptOptions` reference). Authoring craft lives here; raw API surface lives there.
+>
+> These patterns apply equally to the deterministic `prompt` verb and the autonomous `subagent` verb (`client.ai.subagent` / the repo's `aiSubagent`) — same options, same endpoint. Multi-step authoring is most relevant to `subagent`-style plan→act→qa flows.
 
 ---
 

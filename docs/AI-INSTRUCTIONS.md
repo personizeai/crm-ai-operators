@@ -2,6 +2,8 @@
 
 > Verified against `@personize/sdk` `dist/types.d.ts` line 827. This is the authoritative shape — when this doc and the cookbook disagree, the type definition wins.
 
+> **`prompt` vs `subagent`.** This doc covers `client.ai.prompt()` (deterministic). Its autonomous sibling `client.ai.subagent()` takes the **same `PromptOptions`** and hits the same endpoint — it just defaults `agentTools: true` / `governedMemory: false` for plan→act→tool-loop runs. Everything below applies to both; the repo exposes them as [`aiPrompt` / `aiSubagent`](../src/core/lib/ai.ts). Use `subagent` for `research.*` and multi-tool `generate.*`/`act.*`.
+
 The Personize SDK's `client.ai.prompt()` is far richer than our local [`aiPrompt`](../src/core/lib/ai.ts) wrapper currently uses. It supports single-prompt mode, multi-step instructions arrays (with per-step `maxSteps` budget), server-side structured output extraction, server-side evaluation, auto-memorize, MCP tool allowlists, multimodal attachments, and tier-based cost control. We're using ~10% of the surface today.
 
 ---
