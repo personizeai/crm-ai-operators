@@ -1,8 +1,10 @@
-import { PERSONIZE_API_BASE_URL, PERSONIZE_CRM_CONNECTION_ID } from "../core/config.js";
+import type { CrmPassthroughResult } from "@personize/sdk";
+import { client } from "../core/config.js";
+import { PERSONIZE_CRM_CONNECTION_ID } from "../core/config.js";
 import type { CrmId } from "../core/operations/types.js";
 
 export interface CrmPassthroughRequest {
-  /** Active CRM. Determines which Personize endpoint is used. */
+  /** Active CRM. Determines which native SDK passthrough client is used. */
   crm: CrmId;
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   /** Provider-side path (must start with `/`). See provider-specific allowlists in the CRM passthrough spec. */
@@ -11,56 +13,52 @@ export interface CrmPassthroughRequest {
   body?: unknown;
   headers?: Record<string, string>;
   timeoutMs?: number;
-  /** Override the org's default connection. Most callers can omit. */
+  /**
+   * Override the org's default connection. Forwarded as `x-personize-connection-id`.
+   * Most callers omit it — the SDK uses the org's default connection.
+   */
   connectionId?: string;
 }
 
-export interface CrmPassthroughResponse<T = unknown> {
-  status: number;
-  headers: Record<string, string>;
-  body: T;
-  meta: {
-    provider: CrmId;
-    upstreamRequestId: string | null;
-    durationMs: number;
-    rateLimit?: { remaining: number; resetAt?: string };
-  };
-}
+/**
+ * Response shape is the SDK's CrmPassthroughResult (status / headers / body / meta).
+ * Re-exported under the historical name so adapters and operations keep one type.
+ */
+export type CrmPassthroughResponse<T = unknown> = CrmPassthroughResult<T>;
 
 /**
- * Calls a connected CRM through the Personize CRM Passthrough API.
+ * Calls a connected CRM through Personize's native CRM passthrough.
  *
- * The Personize app handles OAuth, token refresh, rate limiting, and audit.
- * Customers connect their CRM once in the Personize dashboard; scripts here
- * only need a Personize API key (PERSONIZE_SECRET_KEY).
+ * Delegates to the SDK's `client.<crm>.request(...)` (added in @personize/sdk
+ * 0.14.0), which the Personize app backs with OAuth, token refresh, rate
+ * limiting, retry, and an audit log. Scripts only need a Personize API key.
  *
- * See docs/crm-passthrough-api.md for the full provider contract.
+ * Previously this issued a raw `fetch` against `/api/v1/crm/<crm>/passthrough`
+ * with a hand-attached Bearer header; that credential plumbing now lives in the
+ * SDK.
  */
 export async function crmPassthrough<T>(request: CrmPassthroughRequest): Promise<CrmPassthroughResponse<T>> {
-  const connectionId = request.connectionId ?? PERSONIZE_CRM_CONNECTION_ID;
-
-  const endpoint = `${PERSONIZE_API_BASE_URL}/api/v1/crm/${request.crm}/passthrough`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${process.env.PERSONIZE_SECRET_KEY}`,
-      ...(connectionId ? { "x-personize-connection-id": connectionId } : {}),
-    },
-    body: JSON.stringify({
-      method: request.method,
-      path: request.path,
-      query: request.query,
-      body: request.body,
-      headers: request.headers,
-      timeoutMs: request.timeoutMs,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`CRM passthrough failed [${request.crm}]: ${response.status} ${errorText}`);
+  const crmClient = (client as unknown as Record<string, { request?: <R>(opts: unknown) => Promise<CrmPassthroughResult<R>> }>)[
+    request.crm
+  ];
+  if (!crmClient || typeof crmClient.request !== "function") {
+    throw new Error(
+      `CRM passthrough unavailable for "${request.crm}": client.${request.crm}.request not found. ` +
+        "Requires @personize/sdk >= 0.14.0 and a supported provider (hubspot | salesforce).",
+    );
   }
 
-  return (await response.json()) as CrmPassthroughResponse<T>;
+  const connectionId = request.connectionId ?? PERSONIZE_CRM_CONNECTION_ID;
+  const headers = connectionId
+    ? { ...(request.headers ?? {}), "x-personize-connection-id": connectionId }
+    : request.headers;
+
+  return crmClient.request<T>({
+    method: request.method,
+    path: request.path,
+    query: request.query,
+    body: request.body,
+    headers,
+    timeoutMs: request.timeoutMs,
+  });
 }
