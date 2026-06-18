@@ -49,6 +49,42 @@ function toCondition(c: LegacyCondition): RetrieveFilterCondition {
   return { property: c.propertyName, operator: OPERATOR_MAP[key] ?? "EQ", value: c.value };
 }
 
+// -----------------------------------------------------------------------------
+// flattenRecord — collapse a unified-retrieve record into the flat property map
+// the operations expect.
+//
+// client.retrieve returns records shaped as:
+//   { record_id, entity_type, properties: { <name>: { Result, UpdatedAt, ... } | { History:[{Value}] } }, crm_keys: { email | websiteUrl | ... } }
+// The pre-0.14 filterByProperty path returned a flat { email, domain, ai_score, ... }
+// object, so we reproduce that here: scalar props → `.Result`, array props →
+// flattened `.History[].Value`, plus the clean crm_keys (websiteUrl aliased to
+// both `domain` and `website_url`, which operations read interchangeably).
+// Verified against the live test org (record envelope uses capital-R `Result`).
+// -----------------------------------------------------------------------------
+function flattenRecord(rec: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const props = (rec?.properties ?? {}) as Record<string, any>;
+  for (const [k, v] of Object.entries(props)) {
+    if (v && typeof v === "object") {
+      if ("Result" in v) out[k] = v.Result;
+      else if (Array.isArray((v as any).History)) {
+        out[k] = (v as any).History.flatMap((h: any) => (h?.Value ?? []));
+      } else out[k] = v;
+    } else {
+      out[k] = v;
+    }
+  }
+  const ck = (rec?.crm_keys ?? {}) as Record<string, unknown>;
+  if (ck.email != null && out.email === undefined) out.email = ck.email;
+  if (ck.websiteUrl != null) {
+    if (out.domain === undefined) out.domain = ck.websiteUrl;
+    if (out.website_url === undefined) out.website_url = ck.websiteUrl;
+  }
+  if (rec?.record_id != null) out.record_id = rec.record_id;
+  if (rec?.entity_type != null && out.entity_type === undefined) out.entity_type = rec.entity_type;
+  return out;
+}
+
 export interface RetrieveRecordsOptions {
   /** Entity type: "contact" | "company" | "conversation" | "signal" | workspace type, etc. */
   type: string;
@@ -83,7 +119,7 @@ export async function retrieveRecords(
   if (typeof retrieve !== "function") return [];
   try {
     const res = await retrieve.call(client, { mode: "filter", filters: buildFilters(opts, false) });
-    return (res?.records ?? []) as Record<string, unknown>[];
+    return ((res?.records ?? []) as Record<string, unknown>[]).map(flattenRecord);
   } catch {
     return [];
   }
@@ -129,7 +165,8 @@ export async function retrieveRecord(target: RecordTarget): Promise<Record<strin
       mode: "filter",
       filters: { crmFilter, pageSize: 1, returnRecords: true },
     });
-    return (res?.records?.[0] ?? null) as Record<string, unknown> | null;
+    const rec = res?.records?.[0] as Record<string, unknown> | undefined;
+    return rec ? flattenRecord(rec) : null;
   } catch {
     return null;
   }
