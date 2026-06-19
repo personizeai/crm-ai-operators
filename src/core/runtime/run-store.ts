@@ -1,5 +1,5 @@
-import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
+import { setProperties } from "../lib/persist.js";
 import type { OperationMode } from "../operations/types.js";
 
 export interface OperationRunRecord {
@@ -25,29 +25,10 @@ export interface OperationRunRecord {
  */
 export async function persistRunRecord(record: OperationRunRecord): Promise<void> {
   try {
-    const memory = (client as any).memory;
-    if (!memory) {
-      logger.warn("Personize SDK has no memory interface; skipping run persistence", {
-        runId: record.run_id,
-      });
-      return;
-    }
-    if (typeof memory.store === "function") {
-      await memory.store({
-        collectionSlug: "operation-runs",
-        primaryKey: { run_id: record.run_id },
-        properties: record,
-      });
-    } else if (typeof memory.batchStore === "function") {
-      await memory.batchStore({
-        collectionSlug: "operation-runs",
-        records: [{ primaryKey: { run_id: record.run_id }, properties: record }],
-      });
-    } else {
-      logger.warn("Personize memory.store / batchStore not found; skipping run persistence", {
-        runId: record.run_id,
-      });
-    }
+    await setProperties(
+      { type: "operation-run", collection: "operation-runs", recordId: record.run_id },
+      record as unknown as Record<string, unknown>,
+    );
   } catch (error) {
     logger.warn("Failed to persist operation run to Personize", {
       runId: record.run_id,

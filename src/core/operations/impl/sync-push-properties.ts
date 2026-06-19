@@ -1,6 +1,6 @@
-import { client } from "../../config.js";
 import { logger } from "../../lib/logger.js";
 import { retrieveRecords, countRecords } from "../../lib/recall.js";
+import { setProperty } from "../../lib/persist.js";
 import { workspace } from "../../lib/workspace.js";
 import type { OperationEntry } from "../types.js";
 
@@ -87,17 +87,8 @@ export const syncPushProperties: OperationEntry = {
           if (contact.account_score_lift === company.icp_fit_score) continue;
 
           if (!context.dryRun) {
-            const memory = (client as any).memory;
-            if (memory?.updateProperty) {
-              await memory.updateProperty({
-                email: contact.email,
-                type: "contact",
-                propertyName: "account_score_lift",
-                operation: "set",
-                value: company.icp_fit_score,
-              });
-              contactsUpdated++;
-            }
+            await setProperty({ type: "contact", email: contact.email }, "account_score_lift", company.icp_fit_score);
+            contactsUpdated++;
           } else {
             logger.info("[DRY RUN] Would propagate account_score_lift", {
               domain: company.domain,

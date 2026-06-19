@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { client } from "../../config.js";
+import { setProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { logger } from "../../lib/logger.js";
@@ -190,17 +190,14 @@ ${pairContext}`,
     const confirmed = result.output.pairs.filter((p) => p.confidence >= 0.75);
 
     // Flag contacts and create tasks
-    const memory = (client as any).memory;
     let tasksCreated = 0;
     let flagged = 0;
 
     for (const pair of confirmed) {
       // Flag both contacts
-      if (memory?.updateProperty) {
-        for (const email of [pair.email_a, pair.email_b]) {
-          await memory.updateProperty({ email, type: "contact", propertyName: "merge_candidate", operation: "set", value: true });
-          flagged++;
-        }
+      for (const email of [pair.email_a, pair.email_b]) {
+        await setProperty({ type: "contact", email }, "merge_candidate", true);
+        flagged++;
       }
 
       // Append note to each contact

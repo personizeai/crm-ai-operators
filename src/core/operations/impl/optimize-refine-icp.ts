@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { client } from "../../config.js";
 import { retrieveRecords } from "../../lib/recall.js";
+import { setProperties } from "../../lib/persist.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -65,7 +65,6 @@ async function getChampionProfile(domain: string): Promise<Record<string, unknow
 }
 
 async function storeRefinement(id: string, name: string, content: string): Promise<void> {
-  const memory = (client as any).memory;
   const properties = {
     record_id: id,
     name,
@@ -76,11 +75,7 @@ async function storeRefinement(id: string, name: string, content: string): Promi
     notes: [{ content, category: "analysis", author: "optimize.refine-icp", timestamp: new Date().toISOString() }],
   };
   try {
-    if (typeof memory?.store === "function") {
-      await memory.store({ collectionSlug: "projects", primaryKey: { record_id: id }, properties });
-    } else if (typeof memory?.batchStore === "function") {
-      await memory.batchStore({ collectionSlug: "projects", records: [{ primaryKey: { record_id: id }, properties }] });
-    }
+    await setProperties({ type: "project", collection: "projects", recordId: id }, properties);
   } catch {
     logger.warn("Failed to store ICP refinement in projects collection");
   }

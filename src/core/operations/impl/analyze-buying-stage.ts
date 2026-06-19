@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { client } from "../../config.js";
+import { setProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
@@ -154,16 +154,13 @@ ${recordContext}`,
           maxTokens: 400,
         });
 
-        const memory = (client as any).memory;
-        if (memory?.updateProperty) {
-          const now = new Date().toISOString();
-          for (const [propertyName, value] of Object.entries({
-            buying_stage: result.output.buying_stage,
-            next_best_action: result.output.next_best_action,
-            buying_stage_updated_at: now,
-          })) {
-            await memory.updateProperty({ email: contact.email, type: "contact", propertyName, operation: "set", value });
-          }
+        const now = new Date().toISOString();
+        for (const [propertyName, value] of Object.entries({
+          buying_stage: result.output.buying_stage,
+          next_best_action: result.output.next_best_action,
+          buying_stage_updated_at: now,
+        })) {
+          await setProperty({ type: "contact", email: contact.email }, propertyName, value);
         }
 
         await workspace.appendUpdate(

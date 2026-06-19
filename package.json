@@ -58,7 +58,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@personize/sdk": "^0.14.0",
+    "@personize/sdk": "^0.16.0",
     "dotenv": "^16.4.0",
     "gray-matter": "^4.0.3",
     "zod": "^3.24.0"

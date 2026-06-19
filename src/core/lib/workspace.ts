@@ -1,5 +1,5 @@
-import { client } from "../config.js";
 import { logger } from "./logger.js";
+import { appendToProperty } from "./persist.js";
 
 export type UpdateType =
   | "observation"
@@ -70,20 +70,17 @@ async function pushArray(
   type?: string,
 ): Promise<void> {
   try {
-    const memory = (client as any).memory;
-    if (!memory || typeof memory.updateProperty !== "function") {
-      logger.warn("Personize SDK has no memory.updateProperty; workspace push skipped", {
-        property,
-      });
-      return;
-    }
-    await memory.updateProperty({
-      ...entity,
-      ...(type ? { type } : {}),
-      propertyName: property,
-      operation: "push",
+    const e = entity as Record<string, string>;
+    await appendToProperty(
+      {
+        type: type ?? "",
+        ...(e.record_id ? { recordId: e.record_id } : {}),
+        ...(e.email ? { email: e.email } : {}),
+        ...(e.website_url ? { websiteUrl: e.website_url } : {}),
+      },
+      property,
       value,
-    });
+    );
   } catch (error) {
     logger.warn("Failed to append workspace property", {
       property,

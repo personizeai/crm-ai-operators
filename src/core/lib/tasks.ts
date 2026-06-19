@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { client } from "../config.js";
 import { logger } from "./logger.js";
+import { setProperties, setProperty } from "./persist.js";
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled" | "declined";
@@ -33,7 +33,6 @@ export interface CreatedTask {
  */
 export async function createTask(args: CreateTaskArgs): Promise<CreatedTask | null> {
   const taskId = `t_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
-  const memory = (client as any).memory;
 
   const properties = {
     task_id: taskId,
@@ -52,25 +51,8 @@ export async function createTask(args: CreateTaskArgs): Promise<CreatedTask | nu
   };
 
   try {
-    if (typeof memory?.store === "function") {
-      await memory.store({
-        collectionSlug: "tasks",
-        primaryKey: { task_id: taskId },
-        properties,
-      });
-      return { task_id: taskId };
-    }
-    if (typeof memory?.batchStore === "function") {
-      await memory.batchStore({
-        collectionSlug: "tasks",
-        records: [{ primaryKey: { task_id: taskId }, properties }],
-      });
-      return { task_id: taskId };
-    }
-    logger.warn("Personize SDK has no memory.store or memory.batchStore; task not created", {
-      task_type: args.task_type,
-    });
-    return null;
+    await setProperties({ type: "task", collection: "tasks", recordId: taskId }, properties);
+    return { task_id: taskId };
   } catch (error) {
     logger.warn("Failed to create task", {
       task_type: args.task_type,
@@ -91,11 +73,6 @@ export interface CompleteTaskArgs {
  * Mark a task as completed. Updates status, completed_at, completed_by, outcome.
  */
 export async function completeTask(args: CompleteTaskArgs): Promise<void> {
-  const memory = (client as any).memory;
-  if (!memory?.updateProperty) {
-    logger.warn("memory.updateProperty unavailable; task not completed", { task_id: args.task_id });
-    return;
-  }
   const completedAt = new Date().toISOString();
   try {
     for (const [propertyName, value] of Object.entries({
@@ -104,13 +81,7 @@ export async function completeTask(args: CompleteTaskArgs): Promise<void> {
       completed_by: args.completed_by,
       ...(args.outcome ? { outcome: args.outcome } : {}),
     })) {
-      await memory.updateProperty({
-        record_id: args.task_id,
-        type: "task",
-        propertyName,
-        operation: "set",
-        value,
-      });
+      await setProperty({ type: "task", recordId: args.task_id }, propertyName, value);
     }
   } catch (error) {
     logger.warn("Failed to complete task", {

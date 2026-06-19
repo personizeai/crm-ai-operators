@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { client } from "../../config.js";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
+import { setProperties } from "../../lib/persist.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -59,7 +59,6 @@ async function getRecentConversations(email: string): Promise<unknown[]> {
 }
 
 async function storeMap(mapId: string, name: string, content: string, domain?: string): Promise<void> {
-  const memory = (client as any).memory;
   const properties = {
     record_id: mapId,
     name,
@@ -71,11 +70,7 @@ async function storeMap(mapId: string, name: string, content: string, domain?: s
     notes: [{ content, category: "reference", author: "generate.mutual-action-plan", timestamp: new Date().toISOString() }],
   };
   try {
-    if (typeof memory?.store === "function") {
-      await memory.store({ collectionSlug: "projects", primaryKey: { record_id: mapId }, properties });
-    } else if (typeof memory?.batchStore === "function") {
-      await memory.batchStore({ collectionSlug: "projects", records: [{ primaryKey: { record_id: mapId }, properties }] });
-    }
+    await setProperties({ type: "project", collection: "projects", recordId: mapId }, properties);
   } catch {
     logger.warn("Failed to store MAP in projects collection");
   }

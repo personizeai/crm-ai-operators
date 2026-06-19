@@ -1,7 +1,7 @@
 import { hubspot, type HubspotContact, type HubspotCompany } from "../../../adapters/hubspot/adapter.js";
 import { salesforce } from "../../../adapters/salesforce/adapter.js";
-import { client } from "../../config.js";
 import { logger } from "../../lib/logger.js";
+import { saveRecords, type SaveRecordInput } from "../../lib/persist.js";
 import type { OperationEntry } from "../types.js";
 
 const PAGE_SIZE = 100;
@@ -102,30 +102,29 @@ function mapSalesforceContact(record: SalesforceContactRow): MappedContact | nul
   };
 }
 
+const TYPE_FOR_SLUG: Record<string, string> = {
+  contacts: "contact",
+  companies: "company",
+};
+
 async function batchStore<T extends { email?: string; domain?: string }>(
   collectionSlug: string,
   records: T[],
   primaryKeyField: "email" | "domain",
 ): Promise<number> {
   if (records.length === 0) return 0;
-  const memory = (client as any).memory;
-  if (!memory || typeof memory.batchStore !== "function") {
-    logger.warn("Personize SDK has no memory.batchStore; sync writes skipped", {
-      collection: collectionSlug,
-    });
-    return 0;
-  }
+  const type = TYPE_FOR_SLUG[collectionSlug] ?? collectionSlug;
   let stored = 0;
   for (let i = 0; i < records.length; i += PAGE_SIZE) {
     const chunk = records.slice(i, i + PAGE_SIZE);
     try {
-      await memory.batchStore({
-        collectionSlug,
-        records: chunk.map((r) => ({
-          primaryKey: { [primaryKeyField]: r[primaryKeyField as keyof T] },
-          properties: r,
-        })),
-      });
+      const items: SaveRecordInput[] = chunk.map((r) => ({
+        ...(primaryKeyField === "email"
+          ? { email: r.email }
+          : { websiteUrl: r.domain }),
+        properties: r,
+      }));
+      await saveRecords(type, collectionSlug, items);
       stored += chunk.length;
     } catch (error) {
       logger.warn("batchStore chunk failed", {

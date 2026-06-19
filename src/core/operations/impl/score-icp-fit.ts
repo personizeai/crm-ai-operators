@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { client } from "../../config.js";
 import { retrieveRecords } from "../../lib/recall.js";
+import { setProperty } from "../../lib/persist.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
@@ -51,26 +51,9 @@ async function writeScoreBack(
   score: number,
   reason: string,
 ): Promise<void> {
-  const memory = (client as any).memory;
-  if (!memory || typeof memory.updateProperty !== "function") {
-    logger.warn("memory.updateProperty unavailable; score not persisted", { domain });
-    return;
-  }
   try {
-    await memory.updateProperty({
-      website_url: domain,
-      type: "company",
-      propertyName: "icp_fit_score",
-      operation: "set",
-      value: score,
-    });
-    await memory.updateProperty({
-      website_url: domain,
-      type: "company",
-      propertyName: "icp_fit_reason",
-      operation: "set",
-      value: reason,
-    });
+    await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_score", score);
+    await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_reason", reason);
   } catch (error) {
     logger.warn("Failed to write ICP score back to Personize", {
       domain,

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { client } from "../../config.js";
+import { setProperty, setProperties, appendToProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
@@ -66,7 +66,6 @@ async function getUnprocessedCalls(): Promise<ConversationRecord[]> {
 }
 
 async function appendSignal(contactEmail: string, signal: string): Promise<void> {
-  const memory = (client as any).memory;
   const signalId = `sig_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
   const properties = {
     record_id: signalId,
@@ -78,15 +77,7 @@ async function appendSignal(contactEmail: string, signal: string): Promise<void>
     title: signal.slice(0, 120),
     description: signal,
   };
-  try {
-    if (typeof memory?.store === "function") {
-      await memory.store({ collectionSlug: "signals", primaryKey: { record_id: signalId }, properties });
-    } else if (typeof memory?.batchStore === "function") {
-      await memory.batchStore({ collectionSlug: "signals", records: [{ primaryKey: { record_id: signalId }, properties }] });
-    }
-  } catch {
-    // Non-fatal
-  }
+  await setProperties({ type: "signal", collection: "signals", recordId: signalId }, properties);
 }
 
 export const analyzeCallSummary: OperationEntry = {
@@ -160,15 +151,12 @@ ${content.slice(0, 4000)}`,
         });
 
         const s = result.output;
-        const memory = (client as any).memory;
 
         // Update conversation record
-        if (memory?.updateProperty) {
-          for (const [prop, val] of Object.entries({ summary: s.summary, key_topics: s.key_topics, action_items: s.action_items })) {
-            await memory.updateProperty({ record_id: call.conversation_id, type: "conversation", propertyName: prop, operation: "set", value: val });
-          }
-          await memory.updateProperty({ record_id: call.conversation_id, type: "conversation", propertyName: "processed_by", operation: "push", value: PROCESSOR_TAG });
+        for (const [prop, val] of Object.entries({ summary: s.summary, key_topics: s.key_topics, action_items: s.action_items })) {
+          await setProperty({ type: "conversation", recordId: call.conversation_id }, prop, val);
         }
+        await appendToProperty({ type: "conversation", recordId: call.conversation_id }, "processed_by", PROCESSOR_TAG);
 
         // Create follow-up tasks for each action item
         for (const item of s.action_items) {

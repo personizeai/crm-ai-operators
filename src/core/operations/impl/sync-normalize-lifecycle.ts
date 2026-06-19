@@ -1,6 +1,6 @@
-import { client } from "../../config.js";
 import { retrieveRecords } from "../../lib/recall.js";
 import { logger } from "../../lib/logger.js";
+import { setProperty } from "../../lib/persist.js";
 import { workspace } from "../../lib/workspace.js";
 import type { OperationEntry } from "../types.js";
 
@@ -80,8 +80,6 @@ export const syncNormalizeLifecycle: OperationEntry = {
     let failed = 0;
     const unmapped = new Set<string>();
 
-    const memory = (client as any).memory;
-
     // Process contacts
     for (const record of contacts) {
       if (!record.lifecycle_stage || !record.email) { skipped++; continue; }
@@ -99,9 +97,7 @@ export const syncNormalizeLifecycle: OperationEntry = {
       }
 
       try {
-        if (memory?.updateProperty) {
-          await memory.updateProperty({ email: record.email, type: "contact", propertyName: "normalized_lifecycle_stage", operation: "set", value: canonical });
-        }
+        await setProperty({ type: "contact", email: record.email }, "normalized_lifecycle_stage", canonical);
 
         if (record.normalized_lifecycle_stage && record.normalized_lifecycle_stage !== canonical) {
           await workspace.appendUpdate(
@@ -140,9 +136,7 @@ export const syncNormalizeLifecycle: OperationEntry = {
       }
 
       try {
-        if (memory?.updateProperty) {
-          await memory.updateProperty({ website_url: record.domain, type: "company", propertyName: "normalized_lifecycle_stage", operation: "set", value: canonical });
-        }
+        await setProperty({ type: "company", websiteUrl: record.domain }, "normalized_lifecycle_stage", canonical);
         updated++;
       } catch (error) {
         failed++;

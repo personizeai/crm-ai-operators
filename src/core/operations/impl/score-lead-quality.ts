@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { client } from "../../config.js";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
+import { setProperty } from "../../lib/persist.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
@@ -66,18 +66,13 @@ async function getCompany(domain: string): Promise<CompanyRecord | null> {
 }
 
 async function writeScoreBack(email: string, score: number, reason: string): Promise<void> {
-  const memory = (client as any).memory;
-  if (!memory?.updateProperty) {
-    logger.warn("memory.updateProperty unavailable; score not persisted", { email });
-    return;
-  }
   const now = new Date().toISOString();
   for (const [propertyName, value] of Object.entries({
     ai_score: score,
     ai_score_reason: reason,
     ai_score_updated_at: now,
   })) {
-    await memory.updateProperty({ email, type: "contact", propertyName, operation: "set", value });
+    await setProperty({ type: "contact", email }, propertyName, value);
   }
 }
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { client } from "../../config.js";
 import { retrieveRecords } from "../../lib/recall.js";
+import { setProperties, setProperty, appendToProperty } from "../../lib/persist.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -60,7 +60,6 @@ async function getUnprocessedEngagements(): Promise<ConversationRecord[]> {
 }
 
 async function appendBuyingSignal(contactEmail: string, signal: string, conversationId: string): Promise<void> {
-  const memory = (client as any).memory;
   const signalId = `sig_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
   const properties = {
     record_id: signalId,
@@ -74,22 +73,16 @@ async function appendBuyingSignal(contactEmail: string, signal: string, conversa
     raw_data: JSON.stringify({ conversation_id: conversationId }),
   };
   try {
-    if (typeof memory?.store === "function") {
-      await memory.store({ collectionSlug: "signals", primaryKey: { record_id: signalId }, properties });
-    } else if (typeof memory?.batchStore === "function") {
-      await memory.batchStore({ collectionSlug: "signals", records: [{ primaryKey: { record_id: signalId }, properties }] });
-    }
+    await setProperties({ type: "signal", collection: "signals", recordId: signalId }, properties);
   } catch {
     // Non-fatal
   }
 }
 
 async function markProcessed(conversationId: string, summary: string): Promise<void> {
-  const memory = (client as any).memory;
-  if (!memory?.updateProperty) return;
   try {
-    await memory.updateProperty({ record_id: conversationId, type: "conversation", propertyName: "summary", operation: "set", value: summary });
-    await memory.updateProperty({ record_id: conversationId, type: "conversation", propertyName: "processed_by", operation: "push", value: PROCESSOR_TAG });
+    await setProperty({ type: "conversation", recordId: conversationId }, "summary", summary);
+    await appendToProperty({ type: "conversation", recordId: conversationId }, "processed_by", PROCESSOR_TAG);
   } catch {
     // Non-fatal
   }

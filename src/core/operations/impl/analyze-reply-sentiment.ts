@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { client } from "../../config.js";
+import { setProperty, setProperties, appendToProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
 import { aiPrompt } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
@@ -86,43 +86,22 @@ async function getUnprocessedReplies(): Promise<ConversationRecord[]> {
 }
 
 async function appendSignal(contactEmail: string, classification: z.infer<typeof ClassificationSchema>): Promise<void> {
-  const memory = (client as any).memory;
   const signalId = `sig_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
-  try {
-    const properties = {
-      record_id: signalId,
-      signal_type: "email-reply",
-      severity: SEVERITY_MAP[classification.class],
-      source: "analyze.reply-sentiment",
-      contact_email: contactEmail,
-      observed_at: new Date().toISOString(),
-      title: `${classification.class} reply from ${contactEmail}`,
-      description: classification.summary,
-    };
-    if (typeof memory?.store === "function") {
-      await memory.store({ collectionSlug: "signals", primaryKey: { record_id: signalId }, properties });
-    } else if (typeof memory?.batchStore === "function") {
-      await memory.batchStore({ collectionSlug: "signals", records: [{ primaryKey: { record_id: signalId }, properties }] });
-    }
-  } catch (error) {
-    logger.warn("Failed to append signal", { contactEmail, error: error instanceof Error ? error.message : String(error) });
-  }
+  const properties = {
+    record_id: signalId,
+    signal_type: "email-reply",
+    severity: SEVERITY_MAP[classification.class],
+    source: "analyze.reply-sentiment",
+    contact_email: contactEmail,
+    observed_at: new Date().toISOString(),
+    title: `${classification.class} reply from ${contactEmail}`,
+    description: classification.summary,
+  };
+  await setProperties({ type: "signal", collection: "signals", recordId: signalId }, properties);
 }
 
 async function markProcessed(conversationId: string): Promise<void> {
-  const memory = (client as any).memory;
-  if (!memory?.updateProperty) return;
-  try {
-    await memory.updateProperty({
-      record_id: conversationId,
-      type: "conversation",
-      propertyName: "processed_by",
-      operation: "push",
-      value: "analyze.reply-sentiment",
-    });
-  } catch {
-    // Non-fatal — we already wrote the classification fields
-  }
+  await appendToProperty({ type: "conversation", recordId: conversationId }, "processed_by", "analyze.reply-sentiment");
 }
 
 export const analyzeReplySentiment: OperationEntry = {
@@ -193,24 +172,19 @@ ${replyText.slice(0, 2000)}`,
         });
 
         const cls = result.output;
-        const memory = (client as any).memory;
 
         // Update conversation with classification
-        if (memory?.updateProperty) {
-          for (const [prop, val] of Object.entries({
-            sentiment: cls.class,
-            summary: cls.summary,
-            action_items: cls.action_items,
-          })) {
-            await memory.updateProperty({ record_id: reply.conversation_id, type: "conversation", propertyName: prop, operation: "set", value: val });
-          }
+        for (const [prop, val] of Object.entries({
+          sentiment: cls.class,
+          summary: cls.summary,
+          action_items: cls.action_items,
+        })) {
+          await setProperty({ type: "conversation", recordId: reply.conversation_id }, prop, val);
         }
 
         // Update contact sequence_status
         const newStatus = SEQUENCE_STATUS_MAP[cls.class];
-        if (memory?.updateProperty && reply.contact_email) {
-          await memory.updateProperty({ email: reply.contact_email, type: "contact", propertyName: "sequence_status", operation: "set", value: newStatus });
-        }
+        await setProperty({ type: "contact", email: reply.contact_email }, "sequence_status", newStatus);
 
         // Append signal
         await appendSignal(reply.contact_email, cls);
