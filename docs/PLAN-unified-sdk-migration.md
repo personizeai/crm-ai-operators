@@ -151,7 +151,7 @@ the platform vocabulary, at zero behavioral cost.
 
 ### Phase 7 — README + docs + SKILL.md
 - **README.md** rewrite around the objective (see structure below).
-- Update `docs/AI-INSTRUCTION-PATTERNS.md`, `docs/AI-INSTRUCTIONS.md`, `docs/CAPABILITY-MENU.md` to the unified `save`/`retrieve`/`subagent` vocabulary; fix writeback examples to `personize_*` fields.
+- Update `docs/DISPATCHING-SUBAGENTS-ON-CRM-RECORDS.md` (formerly `AI-INSTRUCTION-PATTERNS.md`), `docs/AI-INSTRUCTIONS.md`, `docs/CAPABILITY-MENU.md` to the unified `save`/`retrieve`/`subagent` vocabulary; fix writeback examples to `personize_*` fields.
 - `skills/crm-ai-operators/SKILL.md`: add a short, RFC-2119-framed note teaching when to invoke the
   autonomous **subagent** path vs deterministic prompt (the skill is otherwise insulated — it routes to
   repo operations, not raw SDK methods).

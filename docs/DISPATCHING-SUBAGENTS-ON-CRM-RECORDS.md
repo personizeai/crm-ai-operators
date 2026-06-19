@@ -1,44 +1,71 @@
-# Multi-step `instructions[]` — Authoring Guide + Pattern Catalog
+# Dispatching Subagents on CRM Records
 
-> Authoritative guide for writing `client.ai.prompt({ instructions: [...] })` calls. Covers (a) when to use multi-step, (b) framework runtime behavior the author can't change, (c) authoring rules, (d) context-wiring conventions, (e) 14 patterns across two tiers, (f) four error-handling tiers with an inline cookbook, and (g) response shapes and anti-patterns.
+> How to dispatch autonomous, tool-using **subagents** over your CRM records — agents that **plan → gather → reason → act → write back**, one record at a time, grounded in governed memory.
 >
-> Companion to [AI-INSTRUCTIONS.md](AI-INSTRUCTIONS.md) (full `PromptOptions` reference). Authoring craft lives here; raw API surface lives there.
+> A subagent is dispatched with `client.ai.subagent({ instructions: [...] })` (the repo's [`aiSubagent`](../src/core/lib/ai.ts)). Given a record — a contact, company, or deal — it runs a multi-step instruction loop with the agent toolset on, then writes its results back to the record: structured properties via `memory.upsert` (landing in the CRM's `personize_*` fields) and free-text memory the next subagent will recall. This guide is about authoring that loop well.
 >
-> These patterns apply equally to the deterministic `prompt` verb and the autonomous `subagent` verb (`client.ai.subagent` / the repo's `aiSubagent`) — same options, same endpoint. Multi-step authoring is most relevant to `subagent`-style plan→act→qa flows.
+> Covers (a) when a record needs a multi-step subagent vs a single-shot run, (b) runtime behavior you design around, (c) authoring rules, (d) context-wiring, (e) 14 patterns across two tiers, (f) four error-handling tiers + an inline cookbook, and (g) response shapes and anti-patterns.
+>
+> Companion: [AI-INSTRUCTIONS.md](AI-INSTRUCTIONS.md) (full options reference). Authoring craft lives here; the raw option surface lives there.
 
 ---
 
 ## Table of Contents
 
-1. [When to use multi-step](#when-to-use-multi-step-over-a-single-prompt)
-2. [Framework runtime behavior per step](#how-the-framework-treats-each-step)
-3. [Authoring rules of thumb](#authoring-rules-of-thumb)
-4. [Per-step responsibilities](#per-step-responsibilities)
-5. [Output granularity per step](#output-granularity-per-step)
-6. [Context-wiring conventions](#context-wiring-conventions)
-7. [`<abort>` mechanism](#the-abort-mechanism)
-8. [`outputs[]` semantics](#outputs-semantics--required-vs-optional-property-bindings)
-9. [Part I — Core patterns (1–5)](#part-i--core-patterns)
-10. [Part II — Advanced patterns (A–I)](#part-ii--advanced-patterns)
-11. [Error-handling tiers T1–T4](#error-handling-tiers-t1t4)
-12. [Inline error-handling cookbook](#inline-error-handling-cookbook)
-13. [Response shapes](#response-shapes-verified-against-promptresponse)
-14. [Common pitfalls (25+)](#common-pitfalls)
-15. [Quick decision flowchart](#quick-decision-flowchart)
-16. [When NOT to use multi-step](#when-not-to-use-multi-step)
-17. [Migration checklist](#migration-checklist-single-prompt--multi-step)
+1. [The pattern: one subagent per record](#the-pattern-one-subagent-per-record)
+2. [When a record needs a multi-step subagent](#when-a-record-needs-a-multi-step-subagent)
+3. [Framework runtime behavior per step](#how-the-framework-treats-each-step)
+4. [Authoring rules of thumb](#authoring-rules-of-thumb)
+5. [Per-step responsibilities](#per-step-responsibilities)
+6. [Output granularity per step](#output-granularity-per-step)
+7. [Context-wiring conventions](#context-wiring-conventions)
+8. [`<abort>` mechanism](#the-abort-mechanism)
+9. [`outputs[]` semantics](#outputs-semantics--required-vs-optional-property-bindings)
+10. [Part I — Core patterns (1–5)](#part-i--core-patterns)
+11. [Part II — Advanced patterns (A–I)](#part-ii--advanced-patterns)
+12. [Error-handling tiers T1–T4](#error-handling-tiers-t1t4)
+13. [Inline error-handling cookbook](#inline-error-handling-cookbook)
+14. [Response shapes](#response-shapes-verified-against-promptresponse)
+15. [Common pitfalls (25+)](#common-pitfalls)
+16. [Quick decision flowchart](#quick-decision-flowchart)
+17. [When NOT to use multi-step](#when-not-to-use-multi-step)
+18. [Migration checklist](#migration-checklist-single-shot--multi-step-subagent)
 
 ---
 
-## When to use multi-step over a single prompt
+## The pattern: one subagent per record
 
-Single prompt is the default. Multi-step earns its complexity only when **at least one** is true:
+The unit of work is **one record → one subagent run.** Select records with `client.retrieve`, then dispatch a subagent per record — sequentially for low volume, fanned out for batch:
 
-- The task has genuinely sequential reasoning (step N's output shapes step N+1's wording)
-- You want a clear tool-call boundary (gather → reason → produce)
-- You're paying for repeat completions and want the static system-prompt prefix cached (~90% discount on steps 2+ since the prefix doesn't change)
+```ts
+const contacts = await retrieveRecords({ type: "contact", conditions: [/* ICP filter */] });
 
-If the task fits in a single prompt without contortion, use a single prompt.
+for (const contact of contacts) {
+  await aiSubagent({
+    instructions: [ /* plan → gather → reason → produce — authored per the patterns below */ ],
+    outputs: [{ name: "next_best_action" }],
+    tier: "pro",
+    metadata: { recordId: contact.record_id },          // links the run to the record in the journal
+    memorize: { email: contact.email, type: "Contact" }, // auto-write results back to the record
+  });
+}
+```
+
+The subagent's **first step gets the governed retrieval pass** — this contact's memory plus the org's guidelines, injected automatically (see the runtime table below). So every run is scoped to its record and already knows what the org knows. It does the work, then writes back: results land on the record and in the CRM's `personize_*` fields (structured properties via `memory.upsert`), while free-text observations become memory the next run recalls.
+
+The rest of this guide is how to author that `instructions` loop so every per-record subagent is reliable, governed, and cheap.
+
+---
+
+## When a record needs a multi-step subagent
+
+A **single-shot subagent run** (one `instructions` step) is the default. Give a record a **multi-step** subagent only when **at least one** is true:
+
+- The work on the record has genuinely sequential reasoning (step N's output shapes step N+1's wording)
+- You want a clear tool-call boundary (gather from memory/CRM/web → reason → produce → write back)
+- You're processing many records and want the static system-prompt prefix cached (~90% discount on steps 2+ since the prefix doesn't change)
+
+If the work fits in a single-shot run without contortion, keep it single-shot.
 
 ---
 
@@ -255,7 +282,7 @@ outputs: [
 **For:** generation that must follow strict format + voice rules. The model often gets the content right but violates one tone rule on the way; the audit + rewrite catches it without a human round-trip.
 
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — discovery + plan (no output markers)
     "Recall what we know about this contact, then identify the strongest hook from their data. Pick three distinct angles for emails 1, 2, 3. Summarize the plan in plain prose.",
@@ -295,7 +322,7 @@ await client.ai.prompt({
 **For:** numerical scoring where the model often weights factors inconsistently across records. The third step recomputes the score from the factor breakdown — catching the AI when its summary number disagrees with its own components.
 
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — discovery + per-factor evidence
     "Recall this company's firmographics, signals, engagement history, and champion data. Score each factor 0-100 independently: firmographic_fit, buying_signals, engagement, champion_potential. For each, name the strongest 1-2 pieces of evidence. Summarize in prose.",
@@ -332,7 +359,7 @@ await client.ai.prompt({
 **For:** classification of inbound text (replies, intent signals, transcripts) where the class is constrained but the action depends on the class. Cheap, fast, runs on every inbound event.
 
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — extract evidence FIRST (forces reading)
     "Read the email body below and extract verbatim quotes that signal sentiment, intent, or objections. Pull at most 3 quotes. List them in plain prose with a label per quote.",
@@ -368,7 +395,7 @@ await client.ai.prompt({
 **For:** research that requires fresh external data via MCP tools. Different from the other patterns because it explicitly invokes tools and uses `maxSteps` to bound tool-loop iterations.
 
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — agentic search (tool-bounded, no output markers)
     {
@@ -414,7 +441,7 @@ await client.ai.prompt({
 **For:** high-stakes outputs that ship to executives or customers. The third step is an *adversarial* pass — the model attacks its own previous work, finding fabrications and weak claims. More rigorous than Pattern 1's audit because it actively looks for logical/factual integrity issues, not just rule violations.
 
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — plan with statistical thresholds (discovery + reasoning)
     "Recall the won and lost account data. Identify the 3 most statistically meaningful differences between won and lost cohorts. A difference is meaningful only if it appears in 3+ accounts on one side AND <30% on the other. Reject patterns that look like coincidence. Summarize the plan in prose.",
@@ -487,7 +514,7 @@ instructions: "Write outreach emails for this contact. If enterprise, be formal.
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — classify, grounded in memory
     "Recall this company's firmographics and recent engagement. Classify into ONE of:\n• 'enterprise' — 500+ employees, multi-stakeholder buying, POC/pilot-first cycles\n• 'mid-market' — 50–500 employees, 2-3 stakeholders, faster cycles\n• 'smb' — <50 employees, single decision-maker, budget-first\n\nState the classification and the 2-3 specific signals that determined it.",
@@ -533,7 +560,7 @@ instructions: [
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — source A (owned memory)
     "Recall everything in Personize memory about this company: firmographics, contacts, engagement history, signals. Summarize in prose, citing source and date for each fact. Note any fields where memory itself has conflicting values.",
@@ -590,7 +617,7 @@ outputs: [
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     "Recall company data and attempt to score the 4 ICP factors: firmographic_fit, buying_signals, engagement, champion_potential. For each factor:\n• If you CAN determine it from available data: score 0-100 with evidence.\n• If you CANNOT determine it: mark it 'undetermined' and state what data would resolve it.\nThis is NOT a failure — partial scores are valid.",
 
@@ -642,7 +669,7 @@ instructions: [
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — gate FIRST; generation only if all checks pass
     "Before generating any content, check ALL of the following from memory:\n1. Is this contact's email marked opted-out or GDPR-suppressed?\n2. Was this contact messaged in the last 14 days (check sequence_history)?\n3. Does this contact's domain appear on the global suppression list?\n\nIf ANY check fails, emit <abort reason='compliance_[check_name]'>which check failed and why</abort>. Do NOT proceed to generation under any circumstances.",
@@ -704,7 +731,7 @@ for (const contact of accountContacts) {
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — shared account frame (runs once, informs all recipient steps)
     "Recall the account-level context for this company: snapshot, recent signals, shared pain points, buying committee members, and open opportunities. Summarize in structured prose for use in all follow-up steps.",
@@ -750,7 +777,7 @@ instructions: [
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — plan the search before executing (no tool calls yet)
     "Before making any tool calls, write a 3-query search plan: (1) what specific query to run first and why, (2) what query to run second if the first is insufficient, (3) what would make you stop early. This is a planning step only — do not execute any tools yet. Output the plan in prose.",
@@ -803,7 +830,7 @@ instructions: "Classify this email reply as: Positive interest / Question / Refe
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — extract evidence before classifying (prevents "vibe" classification)
     "Read this email and extract verbatim quotes (max 3) that signal intent, sentiment, or objection. Label each quote briefly.",
@@ -862,7 +889,7 @@ instructions: "Normalize the lifecycle stage and all related CRM fields for this
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — expand to explicit checklist FIRST (planning, no execution)
     "Based on the contact data and normalization rules in context, create a numbered checklist of every field that must be normalized. For each checklist item: field name, current raw value, target normalization rule. This is a planning step only — do not normalize any field yet. Output the complete checklist.",
@@ -909,7 +936,7 @@ instructions: "Write a proposal for this account including: executive summary, s
 
 **GOOD:**
 ```ts
-await client.ai.prompt({
+await client.ai.subagent({
   instructions: [
     // Step 1 — draft
     "Recall this account's context and write the proposal. Required sections: executive summary, how we address their top 3 pain points, implementation timeline, pricing, next steps. Apply brand-voice rules.",
@@ -1165,10 +1192,10 @@ Caller MUST check `confidence_level` before acting. Low confidence = route to hu
 
 ```
 Need outputs structured?
-├── No → single prompt, no `outputs` field
+├── No → single-shot run, no `outputs` field
 └── Yes
-    Does the task need sequential reasoning OR tool boundaries?
-    ├── No → single prompt with `outputs`
+    Does the work need sequential reasoning OR tool boundaries?
+    ├── No → single-shot run with `outputs`
     └── Yes
         How many distinct phases?
         ├── 2 → instructions: [discovery, synthesis]
@@ -1204,18 +1231,18 @@ Need outputs structured?
 
 ## When NOT to use multi-step
 
-| Don't use multi-step | Use single `prompt` instead |
+| Don't use multi-step | Use a single-shot subagent run instead |
 |---|---|
-| Single classification (one label out) | `tier: 'basic'`, single prompt |
-| Single field extraction | Single prompt with `outputs[]` markers |
-| Sub-200ms latency required | Single prompt; multi-step adds round-trip overhead |
-| The "steps" are really sub-fields of one schema | Single prompt with one rich schema |
+| Single classification (one label out) | `tier: 'basic'`, one instruction |
+| Single field extraction | One instruction with `outputs[]` markers |
+| Sub-200ms latency required | Single-shot; multi-step adds round-trip overhead |
+| The "steps" are really sub-fields of one schema | One instruction with one rich schema |
 
-A 4-step chain on a one-line classification is wasteful. Stay single-prompt unless the task has genuinely distinct mental acts.
+A 4-step chain on a one-line classification is wasteful. Stay single-shot unless the work on the record has genuinely distinct mental acts.
 
 ---
 
-## Migration checklist (single-prompt → multi-step)
+## Migration checklist (single-shot → multi-step subagent)
 
 When upgrading an existing operation:
 
@@ -1235,15 +1262,15 @@ When upgrading an existing operation:
 - [ ] Set `captureToolResults: true` on `memorize` for research ops with MCP tools.
 - [ ] Add `metadata.recordId`.
 - [ ] Add `mcpTools` allowlist for any op that uses MCP tools (especially in batch).
-- [ ] Run on 10 records; compare quality + token cost to the single-prompt baseline.
+- [ ] Run on 10 records; compare quality + token cost to the single-shot baseline.
 - [ ] If quality didn't improve, diagnose: (a) steps not referencing each other, (b) `<output>` markers missing from last step, (c) wrong tier for the task class.
 
 ---
 
 ## See also
 
-- [AI-INSTRUCTIONS.md](AI-INSTRUCTIONS.md) — full `PromptOptions` reference, response shapes, all SDK fields
-- [ORCHESTRATION.md](ORCHESTRATION.md) — three-layer composition model, five composition patterns mapped to our 26 operations
-- [`node_modules/@personize/sdk/dist/types.d.ts:827`](../node_modules/@personize/sdk/dist/types.d.ts) — authoritative `PromptOptions` interface
-- [`src/core/lib/ai.ts`](../src/core/lib/ai.ts) — local wrapper (fully expanded — supports all SDK fields)
-- [`src/core/operations/impl/`](../src/core/operations/impl/) — 26 current operations (candidates for multi-step migration)
+- [AI-INSTRUCTIONS.md](AI-INSTRUCTIONS.md) — full options reference, response shapes, all SDK fields
+- [CAPABILITY-MENU.md](CAPABILITY-MENU.md) — the 26 operations a subagent can run on a record
+- [`src/core/lib/ai.ts`](../src/core/lib/ai.ts) — `aiPrompt` (single-shot) and `aiSubagent` (autonomous) wrappers
+- [`src/core/lib/persist.ts`](../src/core/lib/persist.ts) — `setProperty`/`saveRecords` → `memory.upsert` writeback to `personize_*`
+- [`src/core/operations/impl/`](../src/core/operations/impl/) — 26 current operations (candidates for multi-step subagent runs)
