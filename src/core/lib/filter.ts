@@ -13,6 +13,7 @@ export type FilterOperator =
   | "not_contains"
   | "starts_with"
   | "exists"
+  | "not_exists"
   | "is_empty";
 
 export type FilterConditionValue =
@@ -60,8 +61,12 @@ const OPERATOR_MAP: Record<FilterOperator, string> = {
   not_contains: "not_contains",
   starts_with: "starts_with",
   exists: "exists",
+  not_exists: "not_exists",
   is_empty: "isEmpty",
 };
+
+/** Operators that test presence/emptiness — they take no value. */
+const VALUELESS_OPERATORS = new Set<FilterOperator>(["exists", "not_exists", "is_empty"]);
 
 /**
  * Compile a declarative Filter into the conditions array shape that
@@ -84,7 +89,13 @@ export function compileFilter(filter: Filter): CompiledFilter {
           if (!mapped) {
             throw new Error(`Unknown filter operator '${op}' on property '${property}'`);
           }
-          conditions.push({ propertyName: property, operator: mapped, value: value as FilterValue });
+          if (VALUELESS_OPERATORS.has(op as FilterOperator)) {
+            // Presence/emptiness checks carry no value. `exists: false` means "not set".
+            const operator = op === "exists" && value === false ? OPERATOR_MAP.not_exists : mapped;
+            conditions.push({ propertyName: property, operator });
+          } else {
+            conditions.push({ propertyName: property, operator: mapped, value: value as FilterValue });
+          }
         }
       }
     }
