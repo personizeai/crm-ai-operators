@@ -7,7 +7,8 @@ import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
 import { workspace } from "../../lib/workspace.js";
-import type { OperationEntry } from "../types.js";
+import { crmWriteback } from "../../lib/crm-writeback.js";
+import type { CrmId, OperationEntry } from "../types.js";
 
 const DEFAULT_FILTER: Filter = {
   collection: "contacts",
@@ -65,8 +66,15 @@ async function getCompany(domain: string): Promise<CompanyRecord | null> {
   return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as CompanyRecord | null;
 }
 
-async function writeScoreBack(email: string, score: number, reason: string): Promise<void> {
+async function writeScoreBack(
+  email: string,
+  score: number,
+  reason: string,
+  crmRecordId?: string,
+  crm?: CrmId,
+): Promise<void> {
   const now = new Date().toISOString();
+  // 1. Source of truth: Personize memory (incl. the updated-at timestamp).
   for (const [propertyName, value] of Object.entries({
     ai_score: score,
     ai_score_reason: reason,
@@ -74,6 +82,12 @@ async function writeScoreBack(email: string, score: number, reason: string): Pro
   })) {
     await setProperty({ type: "contact", email }, propertyName, value);
   }
+  // 2. Mirror to the CRM record's personize_* fields so reps see it in HubSpot.
+  // Only the two writeback-flagged fields exist as CRM props (not the timestamp).
+  await crmWriteback(
+    { crm, type: "contact", crmRecordId },
+    { ai_score: score, ai_score_reason: reason },
+  );
 }
 
 export const scoreLeadQuality: OperationEntry = {
@@ -169,7 +183,8 @@ ${recordContext}`,
           maxTokens: 300,
         });
 
-        await writeScoreBack(contact.email, result.output.ai_score, result.output.ai_score_reason);
+        const crmRecordId = typeof contact.crm_record_id === "string" ? contact.crm_record_id : undefined;
+        await writeScoreBack(contact.email, result.output.ai_score, result.output.ai_score_reason, crmRecordId, context.crm);
 
         await workspace.appendUpdate(
           { email: contact.email },

@@ -7,7 +7,8 @@ import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
 import { workspace } from "../../lib/workspace.js";
-import type { OperationEntry } from "../types.js";
+import { crmWriteback } from "../../lib/crm-writeback.js";
+import type { CrmId, OperationEntry } from "../types.js";
 import { buildScaffold } from "../helpers.js";
 
 const DEFAULT_FILTER: Filter = {
@@ -50,10 +51,18 @@ async function writeScoreBack(
   domain: string,
   score: number,
   reason: string,
+  crmRecordId?: string,
+  crm?: CrmId,
 ): Promise<void> {
   try {
+    // 1. Source of truth: Personize memory.
     await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_score", score);
     await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_reason", reason);
+    // 2. Mirror to the CRM record's personize_* fields so reps see it in HubSpot.
+    await crmWriteback(
+      { crm, type: "company", crmRecordId },
+      { icp_fit_score: score, icp_fit_reason: reason },
+    );
   } catch (error) {
     logger.warn("Failed to write ICP score back to Personize", {
       domain,
@@ -158,7 +167,8 @@ export const scoreIcpFit: OperationEntry = {
 
         const { icp_fit_score, icp_fit_reason } = result.output;
 
-        await writeScoreBack(company.domain, icp_fit_score, icp_fit_reason);
+        const crmRecordId = typeof company.crm_record_id === "string" ? company.crm_record_id : undefined;
+        await writeScoreBack(company.domain, icp_fit_score, icp_fit_reason, crmRecordId, context.crm);
 
         await workspace.appendUpdate(
           { website_url: company.domain },
