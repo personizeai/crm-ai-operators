@@ -28,6 +28,22 @@ function normalizeDomain(domain: string): string {
   return domain.toLowerCase().replace(/^www\./, "");
 }
 
+// Personal / free-mail domains never represent a company account — never link on these.
+const FREE_EMAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "ymail.com", "hotmail.com", "outlook.com",
+  "live.com", "msn.com", "aol.com", "icloud.com", "me.com", "mac.com", "proton.me",
+  "protonmail.com", "pm.me", "gmx.com", "gmx.net", "mail.com", "yandex.com", "zoho.com",
+  "hey.com", "fastmail.com", "qq.com", "163.com", "126.com",
+]);
+
+/** Extract the lowercased domain from an email address, or undefined. */
+function emailDomain(email: string): string | undefined {
+  const at = email.lastIndexOf("@");
+  if (at < 0) return undefined;
+  const domain = email.slice(at + 1).trim().toLowerCase();
+  return domain || undefined;
+}
+
 /** Field/rename mapping is fully manifest-driven (see crm-field-map + collection manifests). */
 async function batchStore(
   collectionSlug: string,
@@ -102,11 +118,15 @@ async function syncHubspotContacts(idToDomain: Map<string, string>): Promise<{ s
   const manifest = await loadCollectionManifest("contacts");
   const requestProps = uniq([...crmRequestFields(manifest, "hubspot"), "hs_object_id"]);
   const associationTypes = crmAssociationTypes(manifest, "hubspot"); // e.g. ["companies"]
+  // company_domain property + the set of known company domains, for the email fallback.
+  const companyProp = associationProperty(manifest, "hubspot", "companies");
+  const companyDomains = new Set(idToDomain.values());
 
   let after: string | undefined;
   let pageCount = 0;
   const all: Record<string, unknown>[] = [];
-  let linked = 0;
+  let linkedByAssociation = 0;
+  let linkedByEmail = 0;
 
   while (true) {
     const page = await hubspot.contacts.list({
@@ -123,7 +143,7 @@ async function syncHubspotContacts(idToDomain: Map<string, string>): Promise<{ s
       mapped.crm_object_type = "contact";
       mapped.crm_record_id = record.id;
 
-      // Resolve association-derived properties (e.g. company_domain from the primary company association).
+      // 1. Authoritative: resolve declared associations (e.g. company_domain from the primary company association).
       for (const objectType of associationTypes) {
         const prop = associationProperty(manifest, "hubspot", objectType);
         if (!prop) continue;
@@ -131,7 +151,17 @@ async function syncHubspotContacts(idToDomain: Map<string, string>): Promise<{ s
         const domain = companyId ? idToDomain.get(companyId) : undefined;
         if (domain) {
           mapped[prop.systemName] = domain;
-          linked++;
+          if (objectType === "companies") linkedByAssociation++;
+        }
+      }
+
+      // 2. Fallback: when no company association exists, link via the email domain —
+      //    but only to a company we actually synced, and never on free-mail domains.
+      if (companyProp && !mapped[companyProp.systemName]) {
+        const ed = emailDomain(mapped.email);
+        if (ed && !FREE_EMAIL_DOMAINS.has(ed) && companyDomains.has(ed)) {
+          mapped[companyProp.systemName] = ed;
+          linkedByEmail++;
         }
       }
       all.push(mapped);
@@ -144,7 +174,11 @@ async function syncHubspotContacts(idToDomain: Map<string, string>): Promise<{ s
     }
   }
 
-  logger.info("HubSpot contact sync: company links resolved", { linked, total: all.length });
+  logger.info("HubSpot contact sync: company links resolved", {
+    byAssociation: linkedByAssociation,
+    byEmailDomain: linkedByEmail,
+    total: all.length,
+  });
   const stored = await batchStore("contacts", all, "email");
   return { scanned: all.length, stored };
 }
