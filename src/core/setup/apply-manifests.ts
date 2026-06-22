@@ -39,6 +39,19 @@ const CollectionPropertySchema = z.object({
    * writeback, so structured `extracted` fields (e.g. employee_count) sync too.
    */
   writeback: z.boolean().optional(),
+  /**
+   * Per-CRM source field that feeds this property during crm.sync-core. Maps the
+   * native CRM field name to this systemName (e.g. { hubspot: "jobtitle" }).
+   * Sync derives both the request list and the rename map from these — no
+   * hardcoded mapping. setup ignores this field.
+   */
+  crmFields: z.record(z.string()).optional(),
+  /**
+   * Per-CRM association object type that resolves this property (e.g.
+   * { hubspot: "companies" } for company_domain). Resolved from the CRM
+   * record's associations, not its flat properties.
+   */
+  crmAssociation: z.record(z.string()).optional(),
 });
 
 const CollectionManifestSchema = z.object({

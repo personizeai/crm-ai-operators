@@ -23,6 +23,8 @@ export interface HubspotPage<T> {
 export interface HubspotContact {
   id: string;
   properties: Record<string, string>;
+  /** Present when `list`/`get` is called with `associations`. Keyed by object type, e.g. "companies". */
+  associations?: Record<string, { results: Array<{ id: string; type?: string }> }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,10 +50,13 @@ async function patch<T>(path: string, body: unknown): Promise<CrmPassthroughResp
 
 export const hubspot = {
   contacts: {
-    list: async (opts: { limit?: number; after?: string; properties?: string[] } = {}) => {
+    list: async (opts: { limit?: number; after?: string; properties?: string[]; associations?: string[] } = {}) => {
       const query: Record<string, string | number> = { limit: opts.limit ?? 100 };
       if (opts.after) query.after = opts.after;
       if (opts.properties?.length) query.properties = opts.properties.join(",");
+      // `associations=companies` makes HubSpot include each contact's associated
+      // company ids under associations.companies.results[].id — used to resolve company_domain.
+      if (opts.associations?.length) query.associations = opts.associations.join(",");
       const res = await get<HubspotPage<HubspotContact>>("/crm/v3/objects/contacts", query);
       return res.body;
     },

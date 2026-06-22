@@ -1,115 +1,37 @@
-import { hubspot, type HubspotContact, type HubspotCompany } from "../../../adapters/hubspot/adapter.js";
+import { hubspot } from "../../../adapters/hubspot/adapter.js";
 import { salesforce } from "../../../adapters/salesforce/adapter.js";
 import { logger } from "../../lib/logger.js";
 import { saveRecords, type SaveRecordInput } from "../../lib/persist.js";
+import {
+  loadCollectionManifest,
+  crmRequestFields,
+  crmAssociationTypes,
+  associationProperty,
+  mapCrmProperties,
+} from "../../lib/crm-field-map.js";
 import type { OperationEntry } from "../types.js";
 
 const PAGE_SIZE = 100;
-
-const HUBSPOT_CONTACT_PROPS = [
-  "email",
-  "firstname",
-  "lastname",
-  "jobtitle",
-  "phone",
-  "lifecyclestage",
-  "company",
-  "hs_object_id",
-];
-
-const HUBSPOT_COMPANY_PROPS = [
-  "domain",
-  "name",
-  "industry",
-  "numberofemployees",
-  "lifecyclestage",
-  "hs_object_id",
-];
-
-interface MappedContact {
-  email: string;
-  first_name?: string;
-  last_name?: string;
-  job_title?: string;
-  phone?: string;
-  lifecycle_stage?: string;
-  crm_source: "HubSpot" | "Salesforce";
-  crm_object_type: "contact" | "lead";
-  crm_record_id: string;
-}
-
-interface MappedCompany {
-  domain: string;
-  company_name?: string;
-  industry?: string;
-  employee_count?: number;
-  lifecycle_stage?: string;
-  crm_source: "HubSpot" | "Salesforce";
-  crm_record_id: string;
-}
-
-function mapHubspotContact(record: HubspotContact): MappedContact | null {
-  const p = record.properties;
-  if (!p.email) return null;
-  return {
-    email: p.email,
-    first_name: p.firstname || undefined,
-    last_name: p.lastname || undefined,
-    job_title: p.jobtitle || undefined,
-    phone: p.phone || undefined,
-    lifecycle_stage: p.lifecyclestage || undefined,
-    crm_source: "HubSpot",
-    crm_object_type: "contact",
-    crm_record_id: record.id,
-  };
-}
-
-function mapHubspotCompany(record: HubspotCompany): MappedCompany | null {
-  const p = record.properties;
-  if (!p.domain) return null;
-  const employeeCount = p.numberofemployees ? Number(p.numberofemployees) : undefined;
-  return {
-    domain: p.domain.toLowerCase().replace(/^www\./, ""),
-    company_name: p.name || undefined,
-    industry: p.industry || undefined,
-    employee_count: Number.isFinite(employeeCount) ? employeeCount : undefined,
-    lifecycle_stage: p.lifecyclestage || undefined,
-    crm_source: "HubSpot",
-    crm_record_id: record.id,
-  };
-}
-
-interface SalesforceContactRow {
-  Id: string;
-  Email: string | null;
-  FirstName?: string | null;
-  LastName?: string | null;
-  Title?: string | null;
-  Phone?: string | null;
-}
-
-function mapSalesforceContact(record: SalesforceContactRow): MappedContact | null {
-  if (!record.Email) return null;
-  return {
-    email: record.Email,
-    first_name: record.FirstName ?? undefined,
-    last_name: record.LastName ?? undefined,
-    job_title: record.Title ?? undefined,
-    phone: record.Phone ?? undefined,
-    crm_source: "Salesforce",
-    crm_object_type: "contact",
-    crm_record_id: record.Id,
-  };
-}
+// Safety cap: bail after 50 pages (~5000 records) to avoid runaway in initial test runs.
+const MAX_PAGES = 50;
 
 const TYPE_FOR_SLUG: Record<string, string> = {
   contacts: "contact",
   companies: "company",
 };
 
-async function batchStore<T extends { email?: string; domain?: string }>(
+function uniq(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function normalizeDomain(domain: string): string {
+  return domain.toLowerCase().replace(/^www\./, "");
+}
+
+/** Field/rename mapping is fully manifest-driven (see crm-field-map + collection manifests). */
+async function batchStore(
   collectionSlug: string,
-  records: T[],
+  records: Record<string, unknown>[],
   primaryKeyField: "email" | "domain",
 ): Promise<number> {
   if (records.length === 0) return 0;
@@ -120,8 +42,8 @@ async function batchStore<T extends { email?: string; domain?: string }>(
     try {
       const items: SaveRecordInput[] = chunk.map((r) => ({
         ...(primaryKeyField === "email"
-          ? { email: r.email }
-          : { websiteUrl: r.domain }),
+          ? { email: r.email as string }
+          : { websiteUrl: r.domain as string }),
         properties: r,
       }));
       await saveRecords(type, collectionSlug, items);
@@ -138,74 +60,119 @@ async function batchStore<T extends { email?: string; domain?: string }>(
   return stored;
 }
 
-async function syncHubspotContacts(): Promise<{ scanned: number; stored: number }> {
-  let after: string | undefined;
-  const all: MappedContact[] = [];
-  let pageCount = 0;
-  while (true) {
-    const page = await hubspot.contacts.list({
-      limit: PAGE_SIZE,
-      after,
-      properties: HUBSPOT_CONTACT_PROPS,
-    });
-    pageCount++;
-    for (const record of page.results) {
-      const mapped = mapHubspotContact(record);
-      if (mapped) all.push(mapped);
-    }
-    if (!page.paging?.next?.after) break;
-    after = page.paging.next.after;
-    // Safety cap: bail after 50 pages (5000 contacts) to avoid runaway in initial test runs.
-    if (pageCount >= 50) {
-      logger.warn("HubSpot contact sync hit safety cap of 50 pages", { pageCount });
-      break;
-    }
-  }
-  const stored = await batchStore("contacts", all, "email");
-  return { scanned: all.length, stored };
-}
+async function syncHubspotCompanies(): Promise<{
+  scanned: number;
+  stored: number;
+  idToDomain: Map<string, string>;
+}> {
+  const manifest = await loadCollectionManifest("companies");
+  const requestProps = uniq([...crmRequestFields(manifest, "hubspot"), "hs_object_id"]);
 
-async function syncHubspotCompanies(): Promise<{ scanned: number; stored: number }> {
   let after: string | undefined;
-  const all: MappedCompany[] = [];
   let pageCount = 0;
+  const all: Record<string, unknown>[] = [];
+  // company id -> normalized domain, so contacts can resolve company_domain from associations.
+  const idToDomain = new Map<string, string>();
+
   while (true) {
-    const page = await hubspot.companies.list({
-      limit: PAGE_SIZE,
-      after,
-      properties: HUBSPOT_COMPANY_PROPS,
-    });
+    const page = await hubspot.companies.list({ limit: PAGE_SIZE, after, properties: requestProps });
     pageCount++;
     for (const record of page.results) {
-      const mapped = mapHubspotCompany(record);
-      if (mapped) all.push(mapped);
+      const mapped = mapCrmProperties(manifest, record.properties, "hubspot");
+      if (typeof mapped.domain !== "string" || !mapped.domain) continue; // domain is the primary key
+      mapped.domain = normalizeDomain(mapped.domain);
+      mapped.crm_source = "HubSpot";
+      mapped.crm_record_id = record.id;
+      idToDomain.set(record.id, mapped.domain as string);
+      all.push(mapped);
     }
     if (!page.paging?.next?.after) break;
     after = page.paging.next.after;
-    if (pageCount >= 50) {
+    if (pageCount >= MAX_PAGES) {
       logger.warn("HubSpot company sync hit safety cap of 50 pages", { pageCount });
       break;
     }
   }
+
   const stored = await batchStore("companies", all, "domain");
+  return { scanned: all.length, stored, idToDomain };
+}
+
+async function syncHubspotContacts(idToDomain: Map<string, string>): Promise<{ scanned: number; stored: number }> {
+  const manifest = await loadCollectionManifest("contacts");
+  const requestProps = uniq([...crmRequestFields(manifest, "hubspot"), "hs_object_id"]);
+  const associationTypes = crmAssociationTypes(manifest, "hubspot"); // e.g. ["companies"]
+
+  let after: string | undefined;
+  let pageCount = 0;
+  const all: Record<string, unknown>[] = [];
+  let linked = 0;
+
+  while (true) {
+    const page = await hubspot.contacts.list({
+      limit: PAGE_SIZE,
+      after,
+      properties: requestProps,
+      associations: associationTypes,
+    });
+    pageCount++;
+    for (const record of page.results) {
+      const mapped = mapCrmProperties(manifest, record.properties, "hubspot");
+      if (typeof mapped.email !== "string" || !mapped.email) continue; // email is the primary key
+      mapped.crm_source = "HubSpot";
+      mapped.crm_object_type = "contact";
+      mapped.crm_record_id = record.id;
+
+      // Resolve association-derived properties (e.g. company_domain from the primary company association).
+      for (const objectType of associationTypes) {
+        const prop = associationProperty(manifest, "hubspot", objectType);
+        if (!prop) continue;
+        const companyId = record.associations?.[objectType]?.results?.[0]?.id;
+        const domain = companyId ? idToDomain.get(companyId) : undefined;
+        if (domain) {
+          mapped[prop.systemName] = domain;
+          linked++;
+        }
+      }
+      all.push(mapped);
+    }
+    if (!page.paging?.next?.after) break;
+    after = page.paging.next.after;
+    if (pageCount >= MAX_PAGES) {
+      logger.warn("HubSpot contact sync hit safety cap of 50 pages", { pageCount });
+      break;
+    }
+  }
+
+  logger.info("HubSpot contact sync: company links resolved", { linked, total: all.length });
+  const stored = await batchStore("contacts", all, "email");
   return { scanned: all.length, stored };
 }
 
 async function syncSalesforceContacts(): Promise<{ scanned: number; stored: number }> {
   // Single-page SOQL for now. For production, the salesforce adapter needs queryAll() that follows nextRecordsUrl.
-  const soql = `SELECT Id, Email, FirstName, LastName, Title, Phone FROM Contact WHERE Email != null LIMIT 200`;
-  const result = await salesforce.query<SalesforceContactRow>(soql);
-  const mapped = result.records
-    .map(mapSalesforceContact)
-    .filter((c): c is MappedContact => c !== null);
-  const stored = await batchStore("contacts", mapped, "email");
-  return { scanned: mapped.length, stored };
+  const manifest = await loadCollectionManifest("contacts");
+  const fields = uniq(["Id", ...crmRequestFields(manifest, "salesforce")]);
+  const soql = `SELECT ${fields.join(", ")} FROM Contact WHERE Email != null LIMIT 200`;
+  const result = await salesforce.query<Record<string, unknown>>(soql);
+
+  const all: Record<string, unknown>[] = [];
+  for (const record of result.records) {
+    const mapped = mapCrmProperties(manifest, record, "salesforce");
+    if (typeof mapped.email !== "string" || !mapped.email) continue;
+    mapped.crm_source = "Salesforce";
+    mapped.crm_object_type = "contact";
+    mapped.crm_record_id = record.Id;
+    all.push(mapped);
+  }
+  const stored = await batchStore("contacts", all, "email");
+  return { scanned: all.length, stored };
 }
 
 export const crmSyncCore: OperationEntry = {
   name: "crm.sync-core",
   mode: "operation",
-  description: "Sync CRM contacts (HubSpot+Salesforce) and companies (HubSpot) into Personize via paginated pull + batch memorize.",
+  description: "Sync CRM contacts (HubSpot+Salesforce) and companies (HubSpot) into Personize via paginated pull + batch memorize. Field mapping is manifest-driven; contacts are linked to companies via CRM associations.",
   category: "sync",
   status: "live",
   idempotent: true,
@@ -236,8 +203,10 @@ export const crmSyncCore: OperationEntry = {
         contactResult = await syncSalesforceContacts();
         // Salesforce companies sync is scaffolded — adapter needs sObject('Account') support and Website-extraction logic.
       } else {
-        contactResult = await syncHubspotContacts();
-        companyResult = await syncHubspotCompanies();
+        // Companies first so contacts can resolve company_domain from the company id->domain index.
+        const companies = await syncHubspotCompanies();
+        companyResult = { scanned: companies.scanned, stored: companies.stored };
+        contactResult = await syncHubspotContacts(companies.idToDomain);
       }
 
       const totalStored = contactResult.stored + companyResult.stored;
