@@ -339,8 +339,74 @@ async function callAi(
   sdkOpts: Record<string, unknown>,
   verb: "prompt" | "subagent",
 ): Promise<any> {
-  if (typeof ai[verb] === "function") return ai[verb](sdkOpts);
-  throw new AiPromptError("sdk_unavailable", `client.ai.${verb} is not a function`);
+  if (typeof ai[verb] !== "function") {
+    throw new AiPromptError("sdk_unavailable", `client.ai.${verb} is not a function`);
+  }
+  const raw = await ai[verb](sdkOpts);
+  return resolvePromptResult(raw);
+}
+
+// -----------------------------------------------------------------------------
+// resolvePromptResult — bridge the async prompt API.
+//
+// /api/v1/prompt runs ASYNC by default: it returns a 202 ack
+//   { success, message, data: { eventId, status } }
+// and the result is delivered out-of-band. (The documented sync switch,
+// `stream:true`, returns an empty 200 body in this deployment, so we don't use
+// it.) We poll GET /api/v1/events/:eventId until the status is terminal, then
+// return `data.responsePayload` — shaped { success, text, outputs?, evaluation?,
+// metadata } — exactly what the downstream finalizers already expect.
+//
+// A synchronous response (no eventId) is passed straight through unchanged.
+// -----------------------------------------------------------------------------
+const TERMINAL_EVENT_STATUS = new Set(["completed", "partial_completed", "failed", "failed_stale"]);
+const POLL_INTERVAL_MS = 1500;
+const POLL_MAX_ATTEMPTS = 120; // ~180s ceiling
+
+async function resolvePromptResult(raw: any): Promise<any> {
+  const eventId = raw?.data?.eventId ?? raw?.eventId;
+  if (!eventId) return raw; // already synchronous — has text/outputs inline
+
+  const http = (client as any).client;
+  if (!http || typeof http.get !== "function") {
+    throw new AiPromptError(
+      "sdk_error",
+      `Async prompt ack (event ${eventId}) received but the SDK HTTP client is unavailable to poll for the result.`,
+    );
+  }
+
+  for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+    await sleep(POLL_INTERVAL_MS);
+    let body: any;
+    try {
+      const resp = await http.get(`/api/v1/events/${eventId}`);
+      body = resp?.data ?? resp;
+    } catch (error) {
+      throw new AiPromptError("sdk_error", `Polling prompt event ${eventId} failed: ${errMsg(error)}`);
+    }
+    const data = body?.data ?? body;
+    const status = data?.status as string | undefined;
+    if (!status || !TERMINAL_EVENT_STATUS.has(status)) continue;
+
+    if (status === "failed" || status === "failed_stale") {
+      const detail = data?.responsePayload?.error ?? data?.error ?? "no detail";
+      throw new AiPromptError("sdk_error", `Prompt event ${eventId} ${status}: ${detail}`);
+    }
+    const payload = data?.responsePayload;
+    if (!payload) {
+      throw new AiPromptError("sdk_error", `Prompt event ${eventId} reached '${status}' but carried no responsePayload.`);
+    }
+    return payload;
+  }
+
+  throw new AiPromptError(
+    "sdk_error",
+    `Prompt event ${eventId} did not complete within ${(POLL_INTERVAL_MS * POLL_MAX_ATTEMPTS) / 1000}s.`,
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function finalizeServerOutputs<T extends z.ZodTypeAny>(

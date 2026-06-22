@@ -30,7 +30,10 @@ const OPERATOR_MAP: Record<string, RetrieveFilterOperator> = {
   equals: "EQ",
   eq: "EQ",
   not_equals: "NEQ",
+  notequals: "NEQ", // compileFilter emits "notEquals" (camelCase) — lowercased here
   neq: "NEQ",
+  is_empty: "IS_EMPTY",
+  isempty: "IS_EMPTY", // compileFilter emits "isEmpty" (camelCase) — lowercased here
   contains: "CONTAINS",
   not_contains: "NOT_CONTAINS",
   starts_with: "STARTS_WITH",
