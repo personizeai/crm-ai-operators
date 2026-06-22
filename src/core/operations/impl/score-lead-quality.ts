@@ -175,6 +175,10 @@ export const scoreLeadQuality: OperationEntry = {
 Apply hard-disqualifier gates from contact-qualification first — score = 0 if any gate fails.
 Apply thresholds from lead-scoring-policy.
 
+Return a JSON object with exactly these two keys (no others):
+- ai_score: integer 0-100
+- ai_score_reason: one-sentence explanation (20-500 chars) citing the strongest 1-2 factors
+
 Contact + company:
 ${recordContext}`,
           context: `# ICP Definition\n\n${guidelines["icp-definition"]}\n\n---\n\n# Contact Qualification\n\n${guidelines["contact-qualification"]}\n\n---\n\n# Lead Scoring Policy\n\n${guidelines["lead-scoring-policy"]}`,
