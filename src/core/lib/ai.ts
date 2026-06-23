@@ -230,7 +230,7 @@ async function runSinglePrompt<T extends z.ZodTypeAny>(
   ai: any,
   verb: "prompt" | "subagent",
 ): Promise<AiResult<z.infer<T>>> {
-  const fullPrompt = buildPrompt(options.context, options.instructions as string);
+  const fullPrompt = buildPrompt(options.context, options.instructions as string, options.outputs);
 
   const sdkOpts: Record<string, unknown> = {
     prompt: fullPrompt,
@@ -315,10 +315,76 @@ async function runMultiStep<T extends z.ZodTypeAny>(
 // Helpers
 // -----------------------------------------------------------------------------
 
-function buildPrompt(context: string | undefined, instructions: string): string {
+function buildPrompt(context: string | undefined, instructions: string, outputs?: z.ZodTypeAny): string {
+  // Inject the EXACT output shape (keys + types) derived from the Zod schema.
+  // Without this, prompts that don't manually enumerate their keys let the model
+  // invent its own ({ score } instead of { ai_score }, recent_engagement as an
+  // array instead of a string, …) and validation fails. Deriving it from the
+  // schema fixes the whole class at the source and can't drift from the schema.
+  const shape = outputs ? describeZodShape(outputs) : undefined;
+  const directive = shape
+    ? `Return ONLY a JSON object with EXACTLY this shape — these keys and types, no others, no extra keys. No prose, no markdown fences.\n\nOutput shape:\n${shape}`
+    : "Return ONLY a JSON object matching the requested schema. No prose, no markdown fences.";
   return context
-    ? `${context}\n\n---\n\nReturn ONLY a JSON object matching the requested schema. No prose, no markdown fences.\n\n${instructions}`
-    : `Return ONLY a JSON object matching the requested schema. No prose, no markdown fences.\n\n${instructions}`;
+    ? `${context}\n\n---\n\n${directive}\n\n${instructions}`
+    : `${directive}\n\n${instructions}`;
+}
+
+/**
+ * Render a compact, human-readable description of a Zod schema's shape — keys,
+ * types, ranges, enum values — so the model knows exactly what JSON to emit.
+ * Handles the constructs the operations use; unknown nodes degrade to "value".
+ */
+function describeZodShape(schema: z.ZodTypeAny, depth = 0): string {
+  const def: any = (schema as any)?._def;
+  if (!def || depth > 6) return "value";
+  switch (def.typeName) {
+    case "ZodObject": {
+      const shape = typeof def.shape === "function" ? def.shape() : def.shape;
+      const entries = Object.entries(shape).map(
+        ([k, v]) => `${JSON.stringify(k)}: ${describeZodShape(v as z.ZodTypeAny, depth + 1)}`,
+      );
+      return `{ ${entries.join(", ")} }`;
+    }
+    case "ZodString": {
+      const checks = def.checks ?? [];
+      const min = checks.find((c: any) => c.kind === "min")?.value;
+      const max = checks.find((c: any) => c.kind === "max")?.value;
+      return min != null || max != null ? `string (${min ?? 0}-${max ?? "∞"} chars)` : "string";
+    }
+    case "ZodNumber": {
+      const checks = def.checks ?? [];
+      const isInt = checks.some((c: any) => c.kind === "int");
+      const min = checks.find((c: any) => c.kind === "min")?.value;
+      const max = checks.find((c: any) => c.kind === "max")?.value;
+      const range = min != null || max != null ? ` (${min ?? ""}–${max ?? ""})` : "";
+      return `${isInt ? "integer" : "number"}${range}`;
+    }
+    case "ZodBoolean":
+      return "boolean";
+    case "ZodEnum":
+      return `one of: ${(def.values as string[]).map((v) => JSON.stringify(v)).join(" | ")}`;
+    case "ZodNativeEnum":
+      return `one of: ${Object.values(def.values).map((v) => JSON.stringify(v)).join(" | ")}`;
+    case "ZodLiteral":
+      return JSON.stringify(def.value);
+    case "ZodArray":
+      return `array of ${describeZodShape(def.type, depth + 1)}`;
+    case "ZodOptional":
+      return `${describeZodShape(def.innerType, depth)} (optional)`;
+    case "ZodNullable":
+      return `${describeZodShape(def.innerType, depth)} or null`;
+    case "ZodDefault":
+      return describeZodShape(def.innerType, depth);
+    case "ZodEffects":
+      return describeZodShape(def.schema, depth);
+    case "ZodUnion":
+      return (def.options as z.ZodTypeAny[]).map((o) => describeZodShape(o, depth)).join(" | ");
+    case "ZodRecord":
+      return "object (string-keyed)";
+    default:
+      return "value";
+  }
 }
 
 function attachCommonFields(sdkOpts: Record<string, unknown>, options: AiPromptOptions<any>): void {
