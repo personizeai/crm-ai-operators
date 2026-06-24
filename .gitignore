@@ -8,3 +8,6 @@ dist/
 *.key
 data/audit/*.jsonl
 data/state/*.txt
+
+# Local-only working notes / reports — never committed
+report/
