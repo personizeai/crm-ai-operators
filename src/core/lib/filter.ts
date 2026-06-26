@@ -14,11 +14,17 @@ export type FilterOperator =
   | "starts_with"
   | "exists"
   | "not_exists"
-  | "is_empty";
+  | "is_empty"
+  | "in"
+  | "not_in";
+
+/** Operators whose value is a list of candidates rather than a single scalar. */
+export type ListFilterOperator = "in" | "not_in";
 
 export type FilterConditionValue =
   | FilterValue
-  | { [op in FilterOperator]?: FilterValue };
+  | { [op in Exclude<FilterOperator, ListFilterOperator>]?: FilterValue }
+  | { [op in ListFilterOperator]?: FilterValue[] };
 
 export interface FilterWhere {
   [property: string]: FilterConditionValue;
@@ -40,7 +46,7 @@ export interface Filter {
 export interface CompiledCondition {
   propertyName: string;
   operator: string;
-  value?: FilterValue;
+  value?: FilterValue | FilterValue[];
 }
 
 export interface CompiledFilter {
@@ -63,6 +69,8 @@ const OPERATOR_MAP: Record<FilterOperator, string> = {
   exists: "exists",
   not_exists: "not_exists",
   is_empty: "isEmpty",
+  in: "in",
+  not_in: "not_in",
 };
 
 /** Operators that test presence/emptiness — they take no value. */
@@ -94,7 +102,7 @@ export function compileFilter(filter: Filter): CompiledFilter {
             const operator = op === "exists" && value === false ? OPERATOR_MAP.not_exists : mapped;
             conditions.push({ propertyName: property, operator });
           } else {
-            conditions.push({ propertyName: property, operator: mapped, value: value as FilterValue });
+            conditions.push({ propertyName: property, operator: mapped, value: value as FilterValue | FilterValue[] });
           }
         }
       }
