@@ -8,6 +8,15 @@ import type { CrmId } from "../operations/types.js";
 import { applyCrmProperties, type ApplyCrmPropertiesResult } from "./apply-crm-properties.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
+const CORE_DIR = path.join(MANIFEST_DIR, "core");
+/**
+ * Org-specific overlay. Git-ignored, never shipped. A file here overrides the
+ * same-named file under manifests/core/ — so an org can customize a guideline or
+ * collection (e.g. icp-definition.md) without editing the shared template, which
+ * a later `setup` would otherwise reset. Core files with no local counterpart
+ * still apply; this is a per-file merge, not a wholesale replace.
+ */
+const LOCAL_DIR = path.join(MANIFEST_DIR, "local");
 
 interface ApplyOptions {
   dryRun: boolean;
@@ -71,13 +80,39 @@ const GuidelineFrontmatterSchema = z.object({
 
 type CollectionManifest = z.infer<typeof CollectionManifestSchema>;
 
-async function readJsonFiles(dir: string): Promise<Array<{ name: string; data: CollectionManifest }>> {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json"));
+interface ManifestFile {
+  name: string;
+  fullPath: string;
+}
+
+/**
+ * List `<category>` files for one or more overlay roots, in precedence order
+ * (later roots win). A file present in a later root replaces the same-named file
+ * from an earlier root; files unique to any root are kept. Missing dirs are
+ * skipped silently, so an absent manifests/local/ is a no-op.
+ */
+async function resolveOverlayFiles(
+  roots: string[],
+  category: string,
+  ext: string,
+): Promise<ManifestFile[]> {
+  const byName = new Map<string, string>();
+  for (const root of roots) {
+    const dir = path.join(root, category);
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(ext)) {
+        byName.set(entry.name, path.join(dir, entry.name));
+      }
+    }
+  }
+  return [...byName.entries()].map(([name, fullPath]) => ({ name, fullPath }));
+}
+
+async function readJsonFiles(files: ManifestFile[]): Promise<Array<{ name: string; data: CollectionManifest }>> {
   const out: Array<{ name: string; data: CollectionManifest }> = [];
   for (const file of files) {
-    const fullPath = path.join(dir, file.name);
-    const raw = JSON.parse(await readFile(fullPath, "utf8"));
+    const raw = JSON.parse(await readFile(file.fullPath, "utf8"));
     const parsed = CollectionManifestSchema.safeParse(raw);
     if (!parsed.success) {
       throw new Error(
@@ -91,8 +126,8 @@ async function readJsonFiles(dir: string): Promise<Array<{ name: string; data: C
   return out;
 }
 
-async function applyCollectionsFromDir(dir: string, dryRun: boolean): Promise<number> {
-  const desired = await readJsonFiles(dir);
+async function applyCollections(files: ManifestFile[], dryRun: boolean): Promise<number> {
+  const desired = await readJsonFiles(files);
   if (desired.length === 0) return 0;
 
   const existing = await client.collections.list();
@@ -112,7 +147,7 @@ async function applyCollectionsFromDir(dir: string, dryRun: boolean): Promise<nu
 
     changed++;
     if (dryRun) {
-      logger.info("[DRY RUN] Would create collection", { slug, file: manifest.name, dir });
+      logger.info("[DRY RUN] Would create collection", { slug, file: manifest.name });
       continue;
     }
 
@@ -123,9 +158,7 @@ async function applyCollectionsFromDir(dir: string, dryRun: boolean): Promise<nu
   return changed;
 }
 
-async function applyGuidelinesFromDir(dir: string, dryRun: boolean): Promise<number> {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".md"));
+async function applyGuidelines(files: ManifestFile[], dryRun: boolean): Promise<number> {
   if (files.length === 0) return 0;
 
   // Idempotent upsert: fetch existing guidelines once, compare by name + value.
@@ -137,7 +170,7 @@ async function applyGuidelinesFromDir(dir: string, dryRun: boolean): Promise<num
 
   let changed = 0;
   for (const file of files) {
-    const parsed = matter(await readFile(path.join(dir, file.name), "utf8"));
+    const parsed = matter(await readFile(file.fullPath, "utf8"));
     const fm = GuidelineFrontmatterSchema.safeParse(parsed.data);
     if (!fm.success) {
       throw new Error(
@@ -180,24 +213,25 @@ async function applyGuidelinesFromDir(dir: string, dryRun: boolean): Promise<num
 export async function applyManifests(options: ApplyOptions) {
   const { dryRun, crm } = options;
 
-  let collections = await applyCollectionsFromDir(
-    path.join(MANIFEST_DIR, "core", "collections"),
+  // Core templates with the git-ignored local overlay layered on top (local wins).
+  let collections = await applyCollections(
+    await resolveOverlayFiles([CORE_DIR, LOCAL_DIR], "collections", ".json"),
     dryRun,
   );
-  let guidelines = await applyGuidelinesFromDir(
-    path.join(MANIFEST_DIR, "core", "guidelines"),
+  let guidelines = await applyGuidelines(
+    await resolveOverlayFiles([CORE_DIR, LOCAL_DIR], "guidelines", ".md"),
     dryRun,
   );
 
   let crmProperties: ApplyCrmPropertiesResult | undefined;
 
   if (crm) {
-    collections += await applyCollectionsFromDir(
-      path.join(MANIFEST_DIR, crm, "collections"),
+    collections += await applyCollections(
+      await resolveOverlayFiles([path.join(MANIFEST_DIR, crm)], "collections", ".json"),
       dryRun,
     );
-    guidelines += await applyGuidelinesFromDir(
-      path.join(MANIFEST_DIR, crm, "guidelines"),
+    guidelines += await applyGuidelines(
+      await resolveOverlayFiles([path.join(MANIFEST_DIR, crm)], "guidelines", ".md"),
       dryRun,
     );
 

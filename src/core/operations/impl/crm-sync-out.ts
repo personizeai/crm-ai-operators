@@ -9,8 +9,7 @@ import {
 } from "../../../adapters/personize-sync.js";
 import type { OperationEntry } from "../types.js";
 
-// Default objects to import per provider. Salesforce companies (Account) ship a
-// template too, but we keep the conservative default until verified end-to-end.
+// Which objects to write back by default. Same default set as sync-in.
 const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
   hubspot: ["contact", "company"],
   salesforce: ["contact"],
@@ -23,7 +22,6 @@ function resolveObjects(provider: SyncProvider, requested?: unknown): SyncEntity
   return DEFAULT_OBJECTS[provider] ?? ["contact"];
 }
 
-/** Map a low-level "connection missing" error to actionable guidance. */
 function explain(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (/connection_not_found|connection_disconnected|not.?connected/i.test(message)) {
@@ -32,20 +30,20 @@ function explain(error: unknown): string {
   return message;
 }
 
-export const crmSyncCore: OperationEntry = {
-  name: "crm.sync-core",
+export const crmSyncOut: OperationEntry = {
+  name: "crm.sync-out",
   mode: "operation",
   description:
-    "Import CRM records (HubSpot/Salesforce contacts and companies) into Personize via Personize-managed sync-in. " +
-    "Connection (OAuth), pagination, field mapping, dedupe, and association linking all run inside Personize — this " +
-    "operation only selects the provider + objects and triggers/polls the managed datasource. Connect the CRM once " +
-    "in the Personize dashboard (Integrations).",
+    "Write enriched Personize properties back to the connected CRM via Personize-managed sync-out (direction:'out'). " +
+    "Personize owns the reverse field mapping; AI-generated values land on dedicated CRM AI properties and never " +
+    "overwrite human-entered native fields. Selects provider + objects and triggers/polls the managed datasource. " +
+    "Connect the CRM once in the Personize dashboard (Integrations).",
   category: "sync",
   status: "live",
   idempotent: true,
   cost: "medium",
-  run_mode: "on-trigger",
-  guidelines_required: ["crm-writeback-policy", "data-hygiene"],
+  run_mode: "on-decision",
+  guidelines_required: ["crm-writeback-policy"],
   run: async (input, context) => {
     const inputObj = (input ?? {}) as { crm?: string; provider?: string; objects?: unknown };
     const provider = (inputObj.provider ?? inputObj.crm ?? context.crm ?? "hubspot") as SyncProvider;
@@ -55,10 +53,10 @@ export const crmSyncCore: OperationEntry = {
       return {
         ok: true,
         runId: context.runId,
-        operation: "crm.sync-core",
+        operation: "crm.sync-out",
         dryRun: true,
         status: "live",
-        summary: `[DRY RUN] Would trigger Personize-managed sync-in for ${provider} ${objects.join(", ")} and poll to completion.`,
+        summary: `[DRY RUN] Would trigger Personize-managed sync-out (write-back) for ${provider} ${objects.join(", ")} and poll to completion.`,
         metrics: { dry_run: true, provider, objects },
       };
     }
@@ -72,37 +70,37 @@ export const crmSyncCore: OperationEntry = {
     try {
       for (const entityType of objects) {
         const ds = await ensureDatasource(provider, entityType);
-        const result = await runSync(ds.id, "in");
+        const result = await runSync(ds.id, "out");
         perObject[entityType] = result;
         totalRecords += result.recordCount ?? 0;
         totalSuccess += result.successCount ?? 0;
         totalFailed += result.failedCount ?? 0;
         if (runFailed(result.status)) anyFailedRun = true;
-        logger.info("crm.sync-core: object synced", { provider, entityType, ...result });
+        logger.info("crm.sync-out: object written back", { provider, entityType, ...result });
       }
     } catch (error) {
       const message = explain(error);
-      logger.error("crm.sync-core failed", { provider, error: message });
+      logger.error("crm.sync-out failed", { provider, error: message });
       return {
         ok: false,
         runId: context.runId,
-        operation: "crm.sync-core",
+        operation: "crm.sync-out",
         dryRun: context.dryRun,
         status: "live",
-        summary: `Sync-in failed: ${message}`,
+        summary: `Sync-out failed: ${message}`,
         metrics: { provider, objects, error: message, per_object: perObject },
       };
     }
 
     const dispatchedOnly = Object.values(perObject).every((r) => !r.eventId);
     const summary = dispatchedOnly
-      ? `Dispatched Personize-managed sync-in for ${provider} ${objects.join(", ")}. Runs are async — check status in the Personize dashboard or via events.`
-      : `Synced ${totalSuccess}/${totalRecords} ${provider} records (${objects.join(", ")}) into Personize via managed sync-in.`;
+      ? `Dispatched Personize-managed sync-out for ${provider} ${objects.join(", ")}. Runs are async — check status in the Personize dashboard or via events.`
+      : `Wrote ${totalSuccess}/${totalRecords} ${provider} records (${objects.join(", ")}) back to the CRM via managed sync-out.`;
 
     return {
       ok: !anyFailedRun,
       runId: context.runId,
-      operation: "crm.sync-core",
+      operation: "crm.sync-out",
       dryRun: context.dryRun,
       status: "live",
       summary,

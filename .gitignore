@@ -14,3 +14,6 @@ data/state/*.txt
 
 # Local-only working notes / reports — never committed
 report/
+
+# Org-specific manifest overlay — overrides manifests/core/ during setup, never shipped
+manifests/local/

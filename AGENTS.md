@@ -110,10 +110,18 @@ When the user asks for new behavior that doesn't fit an existing operation:
 
 These rules apply to every operation in this repo, every agent that runs them.
 
-1. **CRM access goes through the adapter, not raw fetch.** Use
-   `src/adapters/{hubspot,salesforce}/adapter.ts` — never call HubSpot or
-   Salesforce APIs directly. The adapter wraps the Personize CRM Passthrough
-   so OAuth, rate limiting, and audit are handled for you.
+1. **CRM access goes through Personize, never raw fetch.** Two surfaces, by job:
+   - **Bulk record import / write-back** (contacts, companies, deals) →
+     Personize-managed sync via `src/adapters/personize-sync.ts`
+     (`crm.sync-core` for sync-in, `crm.sync-out` for write-back). Personize
+     owns the connection, pagination, field mapping, dedupe, and association
+     linking — our code only picks a provider + objects and triggers/polls.
+   - **Engagement side-channel** (emails, tasks, notes, lifecycle reads) →
+     `src/adapters/{hubspot,salesforce}/adapter.ts`, which wraps the Personize
+     CRM Passthrough (OAuth, rate limiting, audit handled for you).
+
+   Never call HubSpot or Salesforce APIs directly, and never paginate/field-map
+   bulk records by hand — that's the managed sync's job.
 
 2. **Default to `DRY_RUN=true`.** Live writes (Personize or CRM) require
    `DRY_RUN=false` in the environment. Show what you would do before doing it.
