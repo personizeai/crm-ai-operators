@@ -54,7 +54,7 @@
     "mcp": "tsx src/mcp/server.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "node --import tsx/esm --test src/__tests__/filter.test.ts src/__tests__/skip-if.test.ts src/__tests__/dates.test.ts src/__tests__/governance.test.ts"
+    "test": "node --import tsx/esm --test src/__tests__/filter.test.ts src/__tests__/skip-if.test.ts src/__tests__/dates.test.ts src/__tests__/governance.test.ts src/__tests__/sync-mapping.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

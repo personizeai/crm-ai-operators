@@ -3,9 +3,11 @@ import {
   ensureDatasource,
   runSync,
   runFailed,
+  validateSync,
   type SyncEntityType,
   type SyncProvider,
   type SyncRunResult,
+  type SyncValidation,
 } from "../../../adapters/personize-sync.js";
 import type { OperationEntry } from "../types.js";
 
@@ -50,14 +52,21 @@ export const crmSyncOut: OperationEntry = {
     const objects = resolveObjects(provider, inputObj.objects);
 
     if (context.dryRun) {
+      // Validate each object against Personize (run dryRun:true) — no writes.
+      const validations: SyncValidation[] = [];
+      for (const entityType of objects) {
+        validations.push(await validateSync(provider, entityType, "out"));
+      }
+      const allValid = validations.every((v) => v.ok);
+      const detail = validations.map((v) => `${v.entityType}: ${v.note}`).join(" | ");
       return {
-        ok: true,
+        ok: allValid,
         runId: context.runId,
         operation: "crm.sync-out",
         dryRun: true,
         status: "live",
-        summary: `[DRY RUN] Would trigger Personize-managed sync-out (write-back) for ${provider} ${objects.join(", ")} and poll to completion.`,
-        metrics: { dry_run: true, provider, objects },
+        summary: `[DRY RUN] Validated Personize-managed sync-out (write-back) for ${provider} ${objects.join(", ")}. ${detail}`,
+        metrics: { dry_run: true, provider, objects, validations },
       };
     }
 

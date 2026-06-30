@@ -30,6 +30,7 @@
 |-----------|--------|------|----------|-----------|--------------|
 | `crm.sync-core` | live | medium | on-trigger | ✓ | Import CRM contacts + companies into Personize via Personize-managed sync-in. Connection, pagination, field mapping, dedupe, and association linking all run inside Personize. Connect the CRM in the Personize dashboard first. |
 | `crm.sync-out` | live | medium | on-decision | ✓ | Write enriched Personize properties back to the CRM via Personize-managed sync-out. Personize owns reverse mapping; AI values land on dedicated CRM AI properties, never overwriting human-entered fields. |
+| `crm.sync-schedule` | live | low | manual | ✓ | Enable/disable Personize-managed recurring (incremental) sync for a provider's objects. Frequency: hourly/daily/weekly/manual-only. Personize runs the cadence — nothing scheduled locally. |
 | `sync.push-properties` | live | low | on-trigger | ✓ | Propagate company icp_fit_score → account_score_lift on linked contacts. Returns AI property coverage report. Personize handles CRM writeback natively. |
 | `sync.pull-engagements` | live | medium | on-trigger | ✓ | Process engagements already in Personize (synced natively from CRM/Zapier). Extracts insights, surfaces buying signals, creates action tasks. |
 | `sync.normalize-lifecycle` | live | low | on-trigger | ✓ | Map CRM-specific lifecycle stage values (HubSpot + Salesforce variants) to a canonical unified model. Returns coverage + unmapped values list. |
