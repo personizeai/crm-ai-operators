@@ -113,16 +113,26 @@ async function applyCollectionsFromDir(dir: string, dryRun: boolean): Promise<nu
         continue;
       }
 
+      // Guard: can't update without an ID (e.g. malformed API response)
+      if (!existingCollection?.id) {
+        logger.warn("Collection missing id; skipping update", { slug });
+        continue;
+      }
+
       changed++;
       if (dryRun) {
         logger.info("[DRY RUN] Would update collection (add new properties)", { slug, file: manifest.name, netNew: netNewProps.length });
         continue;
       }
 
-      if (existingCollection?.id) {
-        await client.collections.update(existingCollection.id, manifest.data);
-        logger.info("Updated collection", { slug, netNew: netNewProps.length });
-      }
+      // Send existing props + net-new props so the update is safe regardless of
+      // whether the SDK treats `update` as a replace or a merge.
+      const existingProps = (existingCollection.properties ?? []) as typeof netNewProps;
+      await client.collections.update(existingCollection.id, {
+        ...manifest.data,
+        properties: [...existingProps, ...netNewProps],
+      });
+      logger.info("Updated collection", { slug, netNew: netNewProps.length });
       continue;
     }
 

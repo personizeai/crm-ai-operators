@@ -139,10 +139,14 @@ export async function writeOrchestratorLog(
   }
 }
 
+// Blocks loopback, link-local (AWS IMDSv1 169.254.x.x), and RFC-1918 ranges
+const PRIVATE_HOSTNAME_RE = /^(localhost$|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/;
+
 async function notifyOutbound(url: string, payload: unknown): Promise<void> {
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) return;
+    if (PRIVATE_HOSTNAME_RE.test(parsed.hostname)) return;
     const mod = parsed.protocol === "https:" ? await import("node:https") : await import("node:http");
     const body = JSON.stringify(payload);
     return new Promise((resolve) => {

@@ -11,10 +11,21 @@ if (!WEBHOOK_SECRET) {
   logger.warn("PERSONIZE_WEBHOOK_SECRET not set — HMAC validation disabled (dev mode)");
 }
 
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MB — reject before HMAC to prevent OOM
+
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let total = 0;
+    req.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
@@ -41,7 +52,18 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 async function handleWebhook(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const body = await readBody(req);
+  let body: Buffer;
+  try {
+    body = await readBody(req);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "Request body too large") {
+      sendJson(res, 413, { error: "request body too large" });
+    } else {
+      sendJson(res, 400, { error: "failed to read body" });
+    }
+    return;
+  }
   const signature = req.headers["x-personize-signature"] as string | undefined;
 
   if (!validateSignature(body, signature)) {
