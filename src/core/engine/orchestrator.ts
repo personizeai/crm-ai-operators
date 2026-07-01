@@ -131,7 +131,7 @@ export async function writeOrchestratorLog(
   try {
     await setProperties(
       { type: LOG_TYPE, collection: LOG_COLLECTION, recordId: log_id },
-      full as unknown as Record<string, unknown>,
+      { ...full },
     );
   } catch (err) {
     // Non-fatal — log locally only
@@ -140,14 +140,21 @@ export async function writeOrchestratorLog(
 }
 
 async function notifyOutbound(url: string, payload: unknown): Promise<void> {
-  const { request } = await import("node:https");
-  const body = JSON.stringify(payload);
-  return new Promise((resolve) => {
-    const req = request(url, { method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } }, (res) => {
-      res.resume();
-      resolve();
+  try {
+    const parsed = new URL(url);
+    const mod = parsed.protocol === "https:" ? await import("node:https") : await import("node:http");
+    const body = JSON.stringify(payload);
+    return new Promise((resolve) => {
+      const req = mod.request(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        timeout: 5000,
+      }, (res) => { res.resume(); resolve(); });
+      req.on("error", () => resolve());
+      req.on("timeout", () => { req.destroy(); resolve(); });
+      req.end(body);
     });
-    req.on("error", () => resolve());
-    req.end(body);
-  });
+  } catch {
+    // Fire-and-forget: URL parse error or import failure — silently ignore
+  }
 }
