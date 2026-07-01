@@ -71,10 +71,9 @@ async function routeToOperation(
   email: string,
   dryRun: boolean,
 ): Promise<void> {
-  // Validate operation exists in registry before attempting to run
+  // Unknown operation = configuration error; throw so caller increments errors + claims nothing
   if (!OPERATIONS[targetName]) {
-    logger.warn("Dispatcher: unknown operation target", { targetName });
-    return;
+    throw new Error(`Unknown operation: ${targetName}`);
   }
   if (dryRun) {
     logger.info("[DRY RUN] Would run operation", { operation: targetName, email });
@@ -172,9 +171,6 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
       const email = extractEmail(record);
       if (!email || claimedEmails.has(email)) continue;
 
-      claimedEmails.add(email);
-      result.leads_claimed++;
-
       try {
         if (route.target_type === "operation") {
           await routeToOperation(route.target_name, email, dryRun);
@@ -185,6 +181,9 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
           logger.info("Dispatcher: subagent target type not yet implemented; creating task fallback", { route: route.name });
           await routeToTask("subagent-queued", email, route.name, dryRun);
         }
+        // Only claim after successful dispatch so errors don't silently blacklist the email
+        claimedEmails.add(email);
+        result.leads_claimed++;
         result.dispatched++;
         routeDispatched++;
       } catch (err) {
@@ -195,7 +194,7 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
     }
   }
 
-  if (result.errors === 0 && result.dispatched > 0) {
+  if (result.errors === 0) {
     await resetOrchestratorErrors();
   }
 
