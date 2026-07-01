@@ -100,16 +100,28 @@ async function applyCollectionsFromDir(dir: string, dryRun: boolean): Promise<nu
     if (existingSlugs.has(slug)) {
       // Update: push new properties the local manifest has that aren't in the remote yet.
       // Full schema replace is not safe; we only add net-new properties.
-      if (dryRun) {
-        changed++;
-        logger.info("[DRY RUN] Would update collection (add new properties)", { slug, file: manifest.name });
+      const existingCollection = (existing.data ?? []).find((c: any) => c.slug === slug);
+      const existingSystemNames = new Set<string>(
+        ((existingCollection?.properties ?? []) as any[]).map((p: any) => p.systemName).filter(Boolean)
+      );
+      const netNewProps = manifest.data.properties.filter(
+        (p) => !existingSystemNames.has(p.systemName)
+      );
+
+      if (netNewProps.length === 0) {
+        logger.info("Collection up-to-date; skipping update", { slug });
         continue;
       }
-      const existingCollection = (existing.data ?? []).find((c: any) => c.slug === slug);
+
+      changed++;
+      if (dryRun) {
+        logger.info("[DRY RUN] Would update collection (add new properties)", { slug, file: manifest.name, netNew: netNewProps.length });
+        continue;
+      }
+
       if (existingCollection?.id) {
         await client.collections.update(existingCollection.id, manifest.data);
-        changed++;
-        logger.info("Updated collection", { slug });
+        logger.info("Updated collection", { slug, netNew: netNewProps.length });
       }
       continue;
     }
@@ -182,6 +194,7 @@ async function applyGuidelinesFromDir(dir: string, dryRun: boolean): Promise<num
 }
 
 export interface ApplyManifestsResult {
+  [key: string]: unknown;
   collections: number;
   guidelines: number;
   entityTypes: ApplyEntityTypesResult;
@@ -191,7 +204,7 @@ export interface ApplyManifestsResult {
   crmProperties?: ApplyCrmPropertiesResult;
 }
 
-export async function applyManifests(options: ApplyOptions) {
+export async function applyManifests(options: ApplyOptions): Promise<ApplyManifestsResult> {
   const { dryRun, crm } = options;
 
   let collections = await applyCollectionsFromDir(
