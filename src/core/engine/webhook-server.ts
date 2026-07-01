@@ -4,9 +4,12 @@ import { randomUUID } from "node:crypto";
 import { logger } from "../lib/logger.js";
 import { setProperties } from "../lib/persist.js";
 import { dispatch, type IncomingEvent } from "./dispatcher.js";
-import { getOrchestratorConfig } from "./orchestrator.js";
+import { getOrchestratorConfig, writeOrchestratorLog } from "./orchestrator.js";
 
-const WEBHOOK_SECRET = process.env["WEBHOOK_SECRET"];
+const WEBHOOK_SECRET = process.env["PERSONIZE_WEBHOOK_SECRET"];
+if (!WEBHOOK_SECRET) {
+  logger.warn("PERSONIZE_WEBHOOK_SECRET not set — HMAC validation disabled (dev mode)");
+}
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -81,6 +84,16 @@ async function handleWebhook(req: IncomingMessage, res: ServerResponse): Promise
     },
   ).catch((err) => logger.warn("Failed to write webhook-event", { event_id, error: String(err) }));
 
+  // Write to orchestrator log (non-blocking)
+  writeOrchestratorLog({
+    event_type: "webhook.received",
+    severity: "info",
+    summary: `Webhook received: ${event.event_type} (${event_id})`,
+    entity_email: event.entity_email,
+    entity_type_ref: event.entity_type_ref,
+    details_json: JSON.stringify({ event_id, event_type: event.event_type }),
+  }).catch(() => undefined);
+
   // Dispatch async — do not await so we don't block
   dispatch(event)
     .then((result) => {
@@ -109,7 +122,7 @@ async function handleHealth(_req: IncomingMessage, res: ServerResponse): Promise
   });
 }
 
-export function createWebhookServer() {
+export function createWebhookServer(): ReturnType<typeof createServer> {
   return createServer(async (req, res) => {
     try {
       const url = req.url?.split("?")[0] ?? "/";
@@ -127,4 +140,17 @@ export function createWebhookServer() {
       if (!res.headersSent) sendJson(res, 500, { error: "internal error" });
     }
   });
+}
+
+export function startWebhookServer(): ReturnType<typeof createServer> {
+  const port = Number(process.env["ENGINE_PORT"] ?? 3000);
+  const server = createWebhookServer();
+  server.listen(port, () => {
+    logger.info("Webhook server listening", { port });
+  });
+  return server;
+}
+
+export function stopWebhookServer(server: ReturnType<typeof createServer>): Promise<void> {
+  return new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
 }
