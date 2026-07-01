@@ -3,8 +3,9 @@ import { setOrchestratorStatus } from "../core/engine/orchestrator.js";
 import { logger } from "../core/lib/logger.js";
 
 const server = startWebhookServer();   // binds ENGINE_PORT (default 3000) internally
-
-setOrchestratorStatus("running").catch(() => undefined);
+server.once("listening", () => {
+  setOrchestratorStatus("running").catch(() => undefined);
+});
 
 server.on("error", (err: Error) => {
   logger.error("Server error", { error: err.message });
