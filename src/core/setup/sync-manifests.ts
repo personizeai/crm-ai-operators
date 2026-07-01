@@ -1,4 +1,4 @@
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
@@ -23,7 +23,6 @@ async function ensureDir(dir: string): Promise<void> {
 }
 
 async function writeIfChanged(filePath: string, content: string, dryRun: boolean, result: SyncManifestsResult, label: string): Promise<void> {
-  const { readFile } = await import("node:fs/promises");
   const existing = await readFile(filePath, "utf8").catch(() => null);
   if (existing === content) {
     result.skipped++;
