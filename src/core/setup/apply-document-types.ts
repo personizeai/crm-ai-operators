@@ -50,11 +50,10 @@ export async function applyDocumentTypes(dryRun: boolean): Promise<ApplyDocument
 
   for (const dt of desired) {
     const existing = existingByName.get(dt.name);
-    const payload = { type: "document-type", name: dt.name, displayName: dt.displayName, description: dt.description, tags: dt.tags };
 
     if (!existing) {
       if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create document type: ${dt.name}`); continue; }
-      await (client as any).context.create(payload);
+      await (client as any).context.create({ type: "document-type", name: dt.name, displayName: dt.displayName, description: dt.description, tags: dt.tags });
       result.created++;
       result.details.push(`Created document type: ${dt.name}`);
     } else if (existing.description !== dt.description) {

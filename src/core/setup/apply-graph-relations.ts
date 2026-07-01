@@ -47,7 +47,9 @@ export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRe
 
   const existingRes = await (client as any).context?.list?.({ type: "graph-relation" }).catch(() => null);
   const existingKeys = new Set<string>(
-    (existingRes?.data ?? []).map((item: any) => `${item.fromType}::${item.relation}::${item.toType}`)
+    (existingRes?.data ?? [])
+      .filter((item: any) => item?.fromType && item?.relation && item?.toType)
+      .map((item: any) => `${item.fromType}::${item.relation}::${item.toType}`)
   );
 
   for (const rel of desired) {

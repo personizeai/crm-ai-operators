@@ -100,14 +100,15 @@ async function applyCollectionsFromDir(dir: string, dryRun: boolean): Promise<nu
     if (existingSlugs.has(slug)) {
       // Update: push new properties the local manifest has that aren't in the remote yet.
       // Full schema replace is not safe; we only add net-new properties.
-      changed++;
       if (dryRun) {
+        changed++;
         logger.info("[DRY RUN] Would update collection (add new properties)", { slug, file: manifest.name });
         continue;
       }
       const existingCollection = (existing.data ?? []).find((c: any) => c.slug === slug);
       if (existingCollection?.id) {
         await client.collections.update(existingCollection.id, manifest.data);
+        changed++;
         logger.info("Updated collection", { slug });
       }
       continue;

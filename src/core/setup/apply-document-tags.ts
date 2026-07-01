@@ -48,11 +48,10 @@ export async function applyDocumentTags(dryRun: boolean): Promise<ApplyDocumentT
 
   for (const tag of desired) {
     const existing = existingByName.get(tag.name);
-    const payload = { type: "document-tag", name: tag.name, description: tag.description };
 
     if (!existing) {
       if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create document tag: ${tag.name}`); continue; }
-      await (client as any).context.create(payload);
+      await (client as any).context.create({ type: "document-tag", name: tag.name, description: tag.description });
       result.created++;
       result.details.push(`Created document tag: ${tag.name}`);
     } else if (existing.description !== tag.description) {

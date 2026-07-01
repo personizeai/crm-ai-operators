@@ -52,11 +52,10 @@ export async function applyEntityTypes(dryRun: boolean): Promise<ApplyEntityType
 
   for (const et of desired) {
     const existing = existingByName.get(et.name);
-    const payload = { type: "entity-type", name: et.name, displayName: et.displayName, description: et.description, primaryKey: et.primaryKey, icon: et.icon };
 
     if (!existing) {
       if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create entity type: ${et.name}`); continue; }
-      await (client as any).context.create(payload);
+      await (client as any).context.create({ type: "entity-type", name: et.name, displayName: et.displayName, description: et.description, primaryKey: et.primaryKey, icon: et.icon });
       result.created++;
       result.details.push(`Created entity type: ${et.name}`);
     } else if (existing.displayName !== et.displayName || existing.description !== et.description) {
