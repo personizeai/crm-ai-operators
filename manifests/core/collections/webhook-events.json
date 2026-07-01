@@ -1,0 +1,19 @@
+{
+  "name": "Webhook Events",
+  "slug": "webhook-events",
+  "description": "Log of received Personize webhook events and their processing status. Enables deduplication and serves as the polling fallback — on startup the engine fetches all events since last_event_id in orchestrator-config.",
+  "icon": "zap",
+  "color": "#8B5CF6",
+  "primaryKeyField": "event_id",
+  "properties": [
+    { "propertyName": "Event ID", "systemName": "event_id", "type": "text", "autoSystem": false, "description": "Personize event ID. Used as deduplication key." },
+    { "propertyName": "Event Type", "systemName": "event_type", "type": "text", "autoSystem": false, "description": "Personize event type string, e.g. 'memory.updated', 'subagent.completed'." },
+    { "propertyName": "Entity Email", "systemName": "entity_email", "type": "text", "autoSystem": false, "description": "Email of the entity this event relates to, if applicable." },
+    { "propertyName": "Entity Type", "systemName": "entity_type_ref", "type": "text", "autoSystem": false, "description": "Type of the entity in the event payload." },
+    { "propertyName": "Payload JSON", "systemName": "payload_json", "type": "text", "autoSystem": false, "description": "Full event payload as JSON string. Stored for replay if processing fails." },
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["received", "processing", "processed", "failed", "skipped"], "description": "Processing status of this event." },
+    { "propertyName": "Error", "systemName": "error", "type": "text", "autoSystem": false, "description": "Error message if status = failed." },
+    { "propertyName": "Received At", "systemName": "received_at", "type": "date", "autoSystem": false, "description": "When the webhook arrived." },
+    { "propertyName": "Processed At", "systemName": "processed_at", "type": "date", "autoSystem": false, "description": "When processing completed (success or final failure)." }
+  ]
+}

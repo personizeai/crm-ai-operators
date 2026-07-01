@@ -1,0 +1,24 @@
+{
+  "name": "Orchestrator Config",
+  "slug": "orchestrator-config",
+  "description": "Singleton config record for the deployed engine. Stores run status, safety thresholds, notification settings, and post-deploy registration flags. Only one record should exist (config_key = 'default').",
+  "icon": "settings",
+  "color": "#F59E0B",
+  "primaryKeyField": "config_key",
+  "properties": [
+    { "propertyName": "Config Key", "systemName": "config_key", "type": "text", "autoSystem": false, "description": "Always 'default'. Singleton key." },
+    { "propertyName": "Status", "systemName": "status", "type": "options", "autoSystem": false, "options": ["running", "paused", "error", "setup"], "description": "Current engine status. Set to 'paused' to stop all dispatch." },
+    { "propertyName": "Paused Reason", "systemName": "paused_reason", "type": "text", "autoSystem": false, "description": "Why the engine is paused. Human-readable." },
+    { "propertyName": "Paused At", "systemName": "paused_at", "type": "date", "autoSystem": false, "description": "When the pause was set." },
+    { "propertyName": "Paused By", "systemName": "paused_by", "type": "text", "autoSystem": false, "description": "Who or what paused the engine: 'system', 'admin', 'claude-code'." },
+    { "propertyName": "Error Count", "systemName": "error_count", "type": "number", "autoSystem": false, "description": "Consecutive error count since last successful run. Resets on success." },
+    { "propertyName": "Error Threshold", "systemName": "error_threshold", "type": "number", "autoSystem": false, "description": "Auto-pause when error_count reaches this value. Default: 5." },
+    { "propertyName": "Notification Webhook URL", "systemName": "notification_webhook_url", "type": "text", "autoSystem": false, "description": "User-configured outbound webhook URL for receiving notifications (Zapier, Slack, etc.)." },
+    { "propertyName": "Notification Min Severity", "systemName": "notification_min_severity", "type": "options", "autoSystem": false, "options": ["info", "warning", "error", "critical"], "description": "Only send notifications at or above this severity. Default: warning." },
+    { "propertyName": "Last Event ID", "systemName": "last_event_id", "type": "text", "autoSystem": false, "description": "ID of the last successfully processed Personize event. Used for polling fallback." },
+    { "propertyName": "Last Poll At", "systemName": "last_poll_at", "type": "date", "autoSystem": false, "description": "When the engine last polled for missed events." },
+    { "propertyName": "Webhook Registered", "systemName": "webhook_registered", "type": "boolean", "autoSystem": false, "description": "True after setup:webhooks has run successfully." },
+    { "propertyName": "MCP Registered", "systemName": "mcp_registered", "type": "boolean", "autoSystem": false, "description": "True after setup:mcps has run successfully." },
+    { "propertyName": "Updated At", "systemName": "updated_at", "type": "date", "autoSystem": false, "description": "Last time any config property was changed." }
+  ]
+}
