@@ -24,8 +24,11 @@ function validateSignature(body: Buffer, signature: string | undefined): boolean
   if (!WEBHOOK_SECRET) return true; // dev mode: skip validation
   if (!signature) return false;
   const computed = createHmac("sha256", WEBHOOK_SECRET).update(body).digest("hex");
+  // Strip "sha256=" prefix if present (some providers send prefixed signatures)
+  const sig = signature.startsWith("sha256=") ? signature.slice(7) : signature;
   try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(computed));
+    // Use "hex" encoding so both buffers are 32 raw bytes — ensures equal length for timingSafeEqual
+    return timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(computed, "hex"));
   } catch {
     return false;
   }

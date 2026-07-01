@@ -152,6 +152,8 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
     try {
       // compileFilter returns { collection, conditions, logic, limit }
       // retrieveRecords takes { type, conditions, logic, limit } — map collection → type
+      // NOTE: filter.collection must match the registered entity type name (e.g. "contact"),
+      // not the collection slug (e.g. "contacts"). Mismatches silently return [].
       records = await retrieveRecords({
         type: filter.collection,
         conditions: filter.conditions,
