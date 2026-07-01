@@ -2,18 +2,27 @@
 import { parseArgs } from "node:util";
 import { OPERATION_NAMES, OPERATIONS } from "../core/operations/registry.js";
 import { runOperation } from "../core/runtime/operation-runner.js";
+import { isDryRun } from "../core/lib/dry-run.js";
+import { syncManifests } from "../core/setup/sync-manifests.js";
+import { registerWebhooks } from "../core/setup/register-webhooks.js";
+import { registerMcps } from "../core/setup/register-mcps.js";
 
 function usage(): string {
   return `Usage:
   crm-agent operation list
   crm-agent operation run <name> [--input '<json>'] [--crm hubspot|salesforce]
   crm-agent setup apply [--crm hubspot|salesforce]
+  crm-agent setup diff [--crm hubspot|salesforce]
   crm-agent setup verify
+  crm-agent setup sync [all|guidelines|collections|entity-types|document-types|document-tags|graph-relations]
+  crm-agent setup webhooks
+  crm-agent setup mcps
   crm-agent operate <name> [--input '<json>'] [--crm hubspot|salesforce]
   crm-agent optimize <name> [--input '<json>']
 
 Examples:
   crm-agent setup apply --crm hubspot
+  crm-agent setup sync guidelines
   crm-agent operation run crm.sync-core --input '{"crm":"hubspot"}'`;
 }
 
@@ -39,6 +48,28 @@ if (scope === "operation" && action === "list") {
     console.log(`${name.padEnd(24)} ${entry.mode.padEnd(12)} ${entry.description}`);
   }
   process.exit(0);
+}
+
+// setup sync
+if (scope === "setup" && action === "sync") {
+  const filter = maybeName as "all" | "guidelines" | "collections" | "entity-types" | "document-types" | "document-tags" | "graph-relations" | undefined;
+  const result = await syncManifests({ dryRun: await isDryRun(), filter: filter ?? "all" });
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(0);
+}
+
+// setup webhooks (post-deploy)
+if (scope === "setup" && action === "webhooks") {
+  const result = await registerWebhooks();
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(result.errors.length > 0 ? 1 : 0);
+}
+
+// setup mcps (post-deploy)
+if (scope === "setup" && action === "mcps") {
+  const result = await registerMcps();
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(result.errors.length > 0 ? 1 : 0);
 }
 
 let operationName = maybeName;
