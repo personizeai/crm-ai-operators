@@ -172,7 +172,7 @@ Operations that load the same guidelines repeatedly — e.g., scoring 10,000 con
 **Maximize cache hits by:**
 1. Always passing the guideline as `context` (not inside `instructions`) — the SDK caches the `context` field separately
 2. Keeping the `instructions` field variable (per-record content) and `context` field stable (guideline content)
-3. Running bulk scoring in a tight loop rather than spread across hours — the cache TTL is 5 minutes on Anthropic's API
+3. Running bulk scoring in a tight loop rather than spread across hours — the cache TTL is typically ~5 minutes on Anthropic's API (check current docs for the latest value)
 
 **Example pattern (cache-friendly):**
 ```typescript
