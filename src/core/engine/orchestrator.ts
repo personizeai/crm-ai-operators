@@ -142,6 +142,7 @@ export async function writeOrchestratorLog(
 async function notifyOutbound(url: string, payload: unknown): Promise<void> {
   try {
     const parsed = new URL(url);
+    if (!["http:", "https:"].includes(parsed.protocol)) return;
     const mod = parsed.protocol === "https:" ? await import("node:https") : await import("node:http");
     const body = JSON.stringify(payload);
     return new Promise((resolve) => {

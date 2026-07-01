@@ -138,7 +138,7 @@ server.tool(
   "route_create",
   "Create a new dispatch route in Personize. Operator or admin profile required. route_id must be unique (format: route_<slug>).",
   {
-    route_id: z.string().describe("Unique route ID. Format: route_<slug>, e.g. route_score-new-mqls"),
+    route_id: z.string().min(1).regex(/^route_[\w-]+$/).describe("Unique route ID. Format: route_<slug>, e.g. route_score-new-mqls"),
     name: z.string().describe("Human-readable route name"),
     description: z.string().optional().describe("What this route does and when it fires"),
     priority: z.number().int().describe("Evaluation order. Lower number = higher priority."),
