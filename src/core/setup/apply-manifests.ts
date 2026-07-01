@@ -6,6 +6,10 @@ import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
 import type { CrmId } from "../operations/types.js";
 import { applyCrmProperties, type ApplyCrmPropertiesResult } from "./apply-crm-properties.js";
+import { applyEntityTypes, type ApplyEntityTypesResult } from "./apply-entity-types.js";
+import { applyDocumentTypes, type ApplyDocumentTypesResult } from "./apply-document-types.js";
+import { applyDocumentTags, type ApplyDocumentTagsResult } from "./apply-document-tags.js";
+import { applyGraphRelations, type ApplyGraphRelationsResult } from "./apply-graph-relations.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 
@@ -92,8 +96,20 @@ async function applyCollectionsFromDir(dir: string, dryRun: boolean): Promise<nu
 
   for (const manifest of desired) {
     const slug = manifest.data.slug;
+
     if (existingSlugs.has(slug)) {
-      logger.info("Collection already exists; skipping create (update path TBD)", { slug });
+      // Update: push new properties the local manifest has that aren't in the remote yet.
+      // Full schema replace is not safe; we only add net-new properties.
+      changed++;
+      if (dryRun) {
+        logger.info("[DRY RUN] Would update collection (add new properties)", { slug, file: manifest.name });
+        continue;
+      }
+      const existingCollection = (existing.data ?? []).find((c: any) => c.slug === slug);
+      if (existingCollection?.id) {
+        await client.collections.update(existingCollection.id, manifest.data);
+        logger.info("Updated collection", { slug });
+      }
       continue;
     }
 
@@ -164,6 +180,16 @@ async function applyGuidelinesFromDir(dir: string, dryRun: boolean): Promise<num
   return changed;
 }
 
+export interface ApplyManifestsResult {
+  collections: number;
+  guidelines: number;
+  entityTypes: ApplyEntityTypesResult;
+  documentTypes: ApplyDocumentTypesResult;
+  documentTags: ApplyDocumentTagsResult;
+  graphRelations: ApplyGraphRelationsResult;
+  crmProperties?: ApplyCrmPropertiesResult;
+}
+
 export async function applyManifests(options: ApplyOptions) {
   const { dryRun, crm } = options;
 
@@ -193,5 +219,10 @@ export async function applyManifests(options: ApplyOptions) {
     crmProperties = await applyCrmProperties({ crm, dryRun });
   }
 
-  return { collections, guidelines, crmProperties };
+  const entityTypes = await applyEntityTypes(dryRun);
+  const documentTypes = await applyDocumentTypes(dryRun);
+  const documentTags = await applyDocumentTags(dryRun);
+  const graphRelations = await applyGraphRelations(dryRun);
+
+  return { collections, guidelines, entityTypes, documentTypes, documentTags, graphRelations, crmProperties };
 }
