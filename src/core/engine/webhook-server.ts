@@ -7,8 +7,15 @@ import { dispatch, type IncomingEvent } from "./dispatcher.js";
 import { getOrchestratorConfig, writeOrchestratorLog } from "./orchestrator.js";
 
 const WEBHOOK_SECRET = process.env["PERSONIZE_WEBHOOK_SECRET"];
+// ALLOW_UNSIGNED_WEBHOOKS=1 is the explicit dev-only opt-in to bypass HMAC.
+// Without it, missing PERSONIZE_WEBHOOK_SECRET rejects all incoming webhooks.
+const ALLOW_UNSIGNED = process.env["ALLOW_UNSIGNED_WEBHOOKS"] === "1";
 if (!WEBHOOK_SECRET) {
-  logger.warn("PERSONIZE_WEBHOOK_SECRET not set — HMAC validation disabled (dev mode)");
+  if (ALLOW_UNSIGNED) {
+    logger.warn("PERSONIZE_WEBHOOK_SECRET not set — HMAC disabled via ALLOW_UNSIGNED_WEBHOOKS=1 (dev only)");
+  } else {
+    logger.warn("PERSONIZE_WEBHOOK_SECRET not set — all webhook requests will be rejected. Set ALLOW_UNSIGNED_WEBHOOKS=1 to bypass in dev.");
+  }
 }
 
 const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MB — reject before HMAC to prevent OOM
@@ -32,7 +39,7 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 }
 
 function validateSignature(body: Buffer, signature: string | undefined): boolean {
-  if (!WEBHOOK_SECRET) return true; // dev mode: skip validation
+  if (!WEBHOOK_SECRET) return ALLOW_UNSIGNED; // only if explicitly opted in
   if (!signature) return false;
   const computed = createHmac("sha256", WEBHOOK_SECRET).update(body).digest("hex");
   // Strip "sha256=" prefix if present (some providers send prefixed signatures)

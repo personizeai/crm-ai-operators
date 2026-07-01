@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { promises as dns } from "node:dns";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
 import { setProperties } from "../lib/persist.js";
@@ -139,14 +140,60 @@ export async function writeOrchestratorLog(
   }
 }
 
-// Blocks loopback, link-local (AWS IMDSv1 169.254.x.x), and RFC-1918 ranges
+// Fast pre-check: block obvious private hostnames/IPs before DNS resolution
 const PRIVATE_HOSTNAME_RE = /^(localhost$|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/;
+
+/** IPv4: loopback, private RFC-1918, link-local, CGNAT, "this" network */
+function isPrivateIpv4(addr: string): boolean {
+  if (addr === "0.0.0.0") return true;
+  const parts = addr.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return true;
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+/** IPv6: loopback, unspecified, ULA (fc/fd), link-local (fe80::/10), IPv4-mapped */
+function isPrivateIpv6(addr: string): boolean {
+  const a = addr.toLowerCase().split("%")[0]; // strip zone ID
+  if (a === "::1" || a === "::") return true;
+  if (a.startsWith("fc") || a.startsWith("fd")) return true; // ULA fc00::/7
+  // fe80::/10 link-local: second byte 0x80..0xbf → prefix fe8_/fe9_/fea_/feb_
+  if (a.startsWith("fe8") || a.startsWith("fe9") || a.startsWith("fea") || a.startsWith("feb")) return true;
+  // IPv4-mapped ::ffff:x.x.x.x or IPv4-compatible ::x.x.x.x
+  const v4 = a.match(/^::(?:ffff:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (v4) return isPrivateIpv4(v4[1]);
+  return false;
+}
+
+/** Resolve hostname and block if ANY returned address is private. Fails closed on DNS error. */
+async function isHostPrivate(hostname: string): Promise<boolean> {
+  try {
+    const addresses = await dns.lookup(hostname, { all: true });
+    return addresses.some((entry) =>
+      entry.family === 4 ? isPrivateIpv4(entry.address) : isPrivateIpv6(entry.address),
+    );
+  } catch {
+    return true; // DNS failure → fail closed
+  }
+}
 
 async function notifyOutbound(url: string, payload: unknown): Promise<void> {
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) return;
+    // Fast hostname pre-check (obvious cases, avoids DNS round-trip)
     if (PRIVATE_HOSTNAME_RE.test(parsed.hostname)) return;
+    // DNS resolution check — catches SSRF via domains → private IPs, IPv6 ranges,
+    // IPv4-mapped IPv6 (::ffff:169.254.x.x), and reduces DNS-rebinding window
+    if (await isHostPrivate(parsed.hostname)) return;
     const mod = parsed.protocol === "https:" ? await import("node:https") : await import("node:http");
     const body = JSON.stringify(payload);
     return new Promise((resolve) => {
