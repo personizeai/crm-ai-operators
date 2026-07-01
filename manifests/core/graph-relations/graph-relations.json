@@ -1,0 +1,13 @@
+[
+  { "fromType": "contact", "relation": "belongs_to", "toType": "company", "description": "Contact works at or is associated with this company." },
+  { "fromType": "contact", "relation": "has_conversation", "toType": "conversation", "description": "Contact participated in or received this conversation." },
+  { "fromType": "contact", "relation": "has_signal", "toType": "signal", "description": "Contact is the subject of this buying or engagement signal." },
+  { "fromType": "contact", "relation": "has_task", "toType": "task", "description": "This task is about or linked to the contact." },
+  { "fromType": "contact", "relation": "has_log", "toType": "orchestrator_log", "description": "This orchestrator event was triggered by or relates to the contact." },
+  { "fromType": "company", "relation": "has_contact", "toType": "contact", "description": "This contact is associated with the company." },
+  { "fromType": "company", "relation": "has_task", "toType": "task", "description": "This task is about or linked to the company." },
+  { "fromType": "task", "relation": "linked_to_contact", "toType": "contact", "description": "The task's primary entity is this contact." },
+  { "fromType": "task", "relation": "linked_to_company", "toType": "company", "description": "The task's primary entity is this company." },
+  { "fromType": "orchestrator_log", "relation": "grouped_in", "toType": "orchestrator_log", "description": "Log entries sharing the same run_id belong to the same dispatch cycle." },
+  { "fromType": "dispatch_route", "relation": "targets_operation", "toType": "task", "description": "Route creates tasks of a specific type when matched." }
+]
