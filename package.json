@@ -52,6 +52,7 @@
     "operation:list": "tsx src/scripts/crm-agent.ts operation list",
     "pipeline": "tsx src/scripts/crm-agent.ts operation run",
     "mcp": "tsx src/mcp/server.ts",
+    "engine": "tsx src/scripts/engine.ts",
     "sync": "tsx src/scripts/crm-agent.ts setup sync",
     "sync:guidelines": "tsx src/scripts/crm-agent.ts setup sync guidelines",
     "sync:collections": "tsx src/scripts/crm-agent.ts setup sync collections",
