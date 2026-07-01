@@ -20,7 +20,7 @@
     "enabled": true,
     "filter_json": "{\"collection\":\"company\",\"conditions\":[{\"propertyName\":\"lifecycle_stage\",\"operator\":\"equals\",\"value\":\"MQL\"},{\"propertyName\":\"account_research_status\",\"operator\":\"is_empty\",\"value\":null}],\"logic\":\"AND\",\"limit\":25}",
     "target_type": "operation",
-    "target_name": "research.account",
+    "target_name": "research.account-deep-dive",
     "max_per_cycle": 25,
     "created_at": "2026-07-01T00:00:00.000Z",
     "updated_at": "2026-07-01T00:00:00.000Z"
