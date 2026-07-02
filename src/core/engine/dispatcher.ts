@@ -75,7 +75,7 @@ interface DispatchRoute {
   name: string;
   enabled: boolean | string;
   filter_json: string;
-  target_type: "operation" | "subagent" | "task";
+  target_type: "operation" | "subagent" | "task" | "triage";
   target_name: string;
   instructions_name?: string;
   /**
@@ -253,15 +253,89 @@ async function runChain(route: DispatchRoute, email: string, dryRun: boolean): P
   return email;
 }
 
+// Triage decision: the agent picks one operation from the bounded menu, or "none".
+const TriageDecisionSchema = z.object({
+  operation: z.string().describe("The chosen operation name from the menu, or 'none'"),
+  reason: z.string().describe("One sentence on why this operation (or why none)"),
+});
+
+// ---------------------------------------------------------------------------
+// routeToTriage — agentic catch-all. Instead of a hardcoded target, a cheap-tier
+// agent chooses the single most appropriate operation for THIS record from a
+// bounded menu (the live operation registry), or "none". The decision + reason
+// is logged, then execution proceeds through the normal deterministic runOperation
+// path — so the choice is agentic but the execution and audit trail are not.
+//
+// Use as a priority-LAST route: deterministic routes handle everything they match;
+// whatever falls through hits triage. Keep max_per_cycle small and tier cheap.
+// ---------------------------------------------------------------------------
+async function routeToTriage(
+  route: DispatchRoute,
+  record: Record<string, unknown>,
+  email: string,
+  dryRun: boolean,
+): Promise<string> {
+  const menu = Object.values(OPERATIONS)
+    .filter((op) => op.mode === "operation" && op.status === "live")
+    .map((op) => ({ name: op.name, description: op.description, cost: op.cost ?? "medium" }));
+
+  if (dryRun) {
+    logger.info("[DRY RUN] Would triage record", { route: route.name, email, menu_size: menu.length });
+    return email;
+  }
+
+  const decision = await ai({
+    instructions:
+      `You are a CRM triage router. Choose the SINGLE most appropriate operation for this record ` +
+      `from the menu, or "none" if no operation is warranted right now. Prefer the lowest-cost ` +
+      `operation that meaningfully helps.\n\n` +
+      `Record:\n${JSON.stringify(record, null, 2)}\n\n` +
+      `Operation menu:\n${JSON.stringify(menu, null, 2)}`,
+    outputs: TriageDecisionSchema,
+    tier: (route.tier_override as Tier | undefined) ?? "basic",
+    model: route.model_override,
+    maxTokens: 300,
+    metadata: { recordId: email },
+  });
+
+  const chosen = decision.output.operation;
+  logger.info("Dispatcher: triage decision", {
+    route: route.name,
+    email,
+    chosen,
+    reason: decision.output.reason,
+  });
+
+  if (chosen === "none" || !OPERATIONS[chosen]) {
+    // A logged "none" (or an unknown pick) is a valid outcome — nothing to run.
+    return email;
+  }
+
+  const result = await runOperation(
+    chosen,
+    { email },
+    { tierOverride: route.tier_override, modelOverride: route.model_override },
+  );
+  if (!result.ok) {
+    throw new Error(`Triage-selected ${chosen} reported failure: ${result.summary ?? "no summary"}`);
+  }
+  return email;
+}
+
 // ---------------------------------------------------------------------------
 // dispatchOne — shared dispatch logic so sequential and parallel paths call
 // the same code. Returns the email on success (used by parallel path to claim).
 // ---------------------------------------------------------------------------
 async function dispatchOne(
   route: DispatchRoute,
-  email: string,
+  record: Record<string, unknown>,
   dryRun: boolean,
 ): Promise<string> {
+  const email = extractEmail(record)!;
+  // Triage picks the operation per record from a bounded menu (agentic catch-all).
+  if (route.target_type === "triage") {
+    return routeToTriage(route, record, email, dryRun);
+  }
   // A chain takes precedence over a single target — it IS the per-record pipeline.
   if (route.target_chain?.length) {
     return runChain(route, email, dryRun);
@@ -462,7 +536,7 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
 
       const concurrency = Number(route.concurrency ?? 8);
       const outcomes = await runWithConcurrency(eligible, concurrency, (record) =>
-        dispatchOne(route, extractEmail(record)!, dryRun),
+        dispatchOne(route, record, dryRun),
       );
 
       for (const outcome of outcomes) {
@@ -492,7 +566,7 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
         if (!email || claimedEmails.has(email)) continue;
 
         try {
-          await dispatchOne(route, email, dryRun);
+          await dispatchOne(route, record, dryRun);
           // Only claim after successful dispatch so errors don't silently blacklist the email
           claimedEmails.add(email);
           result.leads_claimed++;
