@@ -117,6 +117,28 @@ executive-facing lane to `ultra` by editing route records, not operations.
 Every run records its actual AI cost (`credits_used`, `tokens_used`, `ai_calls`)
 to the `operation-runs` collection — so spend is queryable per operation, per day.
 
+### Daily budget ceiling
+
+Set `daily_budget_credits` on the orchestrator config to cap total AI spend per
+day. The dispatcher checks it before each cycle (skips entirely if exhausted) and
+stops opening new work mid-cycle once the running total reaches the cap. The
+counter (`spend_today` / `spend_date`) lives in the orchestrator config and rolls
+over by date. Accounting is approximate — spend is recorded once per cycle, so the
+cap can overshoot by at most one cycle's worth of work (bounded by `max_per_cycle`).
+Budget is denominated in Personize credits, the same unit the SDK meters, so
+there's no invented dollar rate. (Note: subagent routes and the triage decision
+call bypass `runOperation`, so their spend is not yet metered into the counter.)
+
+### Self-verifying operations
+
+An operation can grade its own output before writing by appending a self-check
+step to its prompt (`verificationInstruction` + `VerificationSchema` +
+`assertApproved` in `lib/instruction-patterns.ts`). The model reviews its draft
+against a rule set and either corrects it or rejects it; a rejection throws, so
+the operation's write never happens. `generate.outreach-sequence` uses this to
+enforce brand-voice and formatting rules before creating send-email tasks. It
+needs no separate eval call and works on hosted or Private.
+
 ## Choosing a pattern
 
 ```

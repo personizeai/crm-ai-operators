@@ -25,6 +25,12 @@ export interface OrchestratorConfig {
   webhook_registered?: boolean;
   mcp_registered?: boolean;
   updated_at?: string;
+  /** Daily AI-spend cap in Personize credits. 0 or unset = no cap. */
+  daily_budget_credits?: number;
+  /** Running credit spend for spend_date (reset when the day rolls over). */
+  spend_today?: number;
+  /** YYYY-MM-DD the spend_today counter belongs to. */
+  spend_date?: string;
 }
 
 export interface OrchestratorLogEntry {
@@ -118,6 +124,48 @@ export async function bumpOrchestratorError(reason: string): Promise<Orchestrato
 
 export async function resetOrchestratorErrors(): Promise<void> {
   await writeConfig({ error_count: 0 });
+}
+
+// ---------------------------------------------------------------------------
+// Daily budget ceiling (config running counter).
+//
+// Budget is denominated in Personize credits (what the SDK meters as
+// creditsCharged), so budget and spend are the same unit — no invented USD rate.
+// The counter is persisted in orchestrator-config and rolls over by date.
+// Accounting is intentionally approximate: spend is recorded once per dispatch
+// cycle (not per operation), so under concurrency the cap can overshoot by at
+// most one cycle's worth of work — bounded by max_per_cycle.
+// ---------------------------------------------------------------------------
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export interface BudgetStatus {
+  /** True when a cap is set and today's spend already meets/exceeds it. */
+  exhausted: boolean;
+  /** The configured cap (0 = no cap). */
+  budget: number;
+  /** Spend recorded for today (0 after a day rollover). */
+  spendToday: number;
+}
+
+/** Check today's budget, accounting for a day rollover. No cap → never exhausted. */
+export async function checkDailyBudget(): Promise<BudgetStatus> {
+  const config = await getOrchestratorConfig();
+  const budget = Number(config.daily_budget_credits ?? 0);
+  if (!budget || budget <= 0) return { exhausted: false, budget: 0, spendToday: 0 };
+  const spend = config.spend_date === todayStr() ? Number(config.spend_today ?? 0) : 0;
+  return { exhausted: spend >= budget, budget, spendToday: spend };
+}
+
+/** Add credits to today's spend counter (resets the counter on a new day). */
+export async function recordDailySpend(credits: number): Promise<void> {
+  if (!credits || credits <= 0) return;
+  const config = await getOrchestratorConfig();
+  const today = todayStr();
+  const base = config.spend_date === today ? Number(config.spend_today ?? 0) : 0;
+  await writeConfig({ spend_today: base + credits, spend_date: today });
 }
 
 export async function writeOrchestratorLog(

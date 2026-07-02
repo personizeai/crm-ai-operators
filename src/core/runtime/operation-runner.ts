@@ -59,6 +59,16 @@ export async function runOperation(
         const recordsUpdated =
           typeof metrics.records_updated === "number" ? metrics.records_updated : undefined;
         const usage = getUsageTotals();
+        // Surface per-run cost on the result so callers (e.g. the dispatcher's
+        // budget accounting) can read it without a separate query.
+        if (usage) {
+          result.metrics = {
+            ...(result.metrics ?? {}),
+            credits_used: usage.credits,
+            tokens_used: usage.tokens,
+            ai_calls: usage.aiCalls,
+          };
+        }
 
         await safeAudit({ runId, operation: name, event: "completed", dryRun, meta: result });
         await persistRunRecord({

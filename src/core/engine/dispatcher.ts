@@ -14,7 +14,10 @@ import {
   bumpOrchestratorError,
   resetOrchestratorErrors,
   writeOrchestratorLog,
+  checkDailyBudget,
+  recordDailySpend,
 } from "./orchestrator.js";
+import type { OperationResult } from "../operations/types.js";
 
 export interface IncomingEvent {
   event_id: string;
@@ -111,6 +114,10 @@ export interface DispatchResult {
   dispatched: number;
   errors: number;
   skipped_paused: boolean;
+  /** True when the cycle was skipped because the daily budget was already exhausted. */
+  skipped_budget: boolean;
+  /** AI credits spent during this cycle (approximate; see orchestrator budget notes). */
+  credits_spent: number;
   dry_run: boolean;
   duration_ms: number;
 }
@@ -136,20 +143,26 @@ function extractEmail(record: Record<string, unknown>): string | undefined {
   return (record.email ?? record.contact_email ?? record.record_id) as string | undefined;
 }
 
+/** Read the per-run AI credit cost the operation runner attaches to result.metrics. */
+function readCredits(result: OperationResult): number {
+  const c = result.metrics?.credits_used;
+  return typeof c === "number" ? c : 0;
+}
+
 async function routeToOperation(
   targetName: string,
   email: string,
   dryRun: boolean,
   tierOverride?: string,
   modelOverride?: string,
-): Promise<void> {
+): Promise<number> {
   // Unknown operation = configuration error; throw so caller increments errors + claims nothing
   if (!OPERATIONS[targetName]) {
     throw new Error(`Unknown operation: ${targetName}`);
   }
   if (dryRun) {
     logger.info("[DRY RUN] Would run operation", { operation: targetName, email });
-    return;
+    return 0;
   }
   // runOperation(name, input, options) — handles runId + dryRun internally.
   // Operations report internal failures by RETURNING ok:false (not throwing) —
@@ -158,6 +171,7 @@ async function routeToOperation(
   if (!result.ok) {
     throw new Error(`Operation ${targetName} reported failure: ${result.summary ?? "no summary"}`);
   }
+  return readCredits(result);
 }
 
 async function routeToTask(
@@ -193,10 +207,10 @@ const SubagentResultSchema = z.object({
 // Loads the route's instructions_name guideline as the behavior spec and runs an
 // autonomous agent (tools on) against the record. Replaces the former task stub.
 // ---------------------------------------------------------------------------
-async function routeToSubagent(route: DispatchRoute, email: string, dryRun: boolean): Promise<void> {
+async function routeToSubagent(route: DispatchRoute, email: string, dryRun: boolean): Promise<number> {
   if (dryRun) {
     logger.info("[DRY RUN] Would run subagent", { route: route.name, email });
-    return;
+    return 0;
   }
   if (!route.instructions_name) {
     throw new Error(`Subagent route ${route.name} requires instructions_name (the guideline to run).`);
@@ -207,6 +221,8 @@ async function routeToSubagent(route: DispatchRoute, email: string, dryRun: bool
       `Subagent route ${route.name}: guideline '${route.instructions_name}' not found. Run setup.apply to install it.`,
     );
   }
+  // Subagent routes call ai() directly (not via runOperation), so their spend is
+  // not metered into the daily budget counter. Documented limitation.
   await ai({
     autonomous: true,
     instructions:
@@ -218,6 +234,7 @@ async function routeToSubagent(route: DispatchRoute, email: string, dryRun: bool
     model: route.model_override,
     metadata: { recordId: email },
   });
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,9 +247,10 @@ async function routeToSubagent(route: DispatchRoute, email: string, dryRun: bool
 // redoing work. A shared sessionId (deterministic per route+record) lets the
 // backend maintain continuity across stages for operations that read input.sessionId.
 // ---------------------------------------------------------------------------
-async function runChain(route: DispatchRoute, email: string, dryRun: boolean): Promise<string> {
+async function runChain(route: DispatchRoute, email: string, dryRun: boolean): Promise<number> {
   const chain = route.target_chain ?? [];
   const sessionId = `chain_${route.route_id}_${email}`;
+  let credits = 0;
   for (const opName of chain) {
     if (!OPERATIONS[opName]) {
       throw new Error(`Unknown operation in chain ${route.name}: ${opName}`);
@@ -246,11 +264,12 @@ async function runChain(route: DispatchRoute, email: string, dryRun: boolean): P
       { email, sessionId },
       { tierOverride: route.tier_override, modelOverride: route.model_override },
     );
+    credits += readCredits(result);
     if (!result.ok) {
       throw new Error(`Chain ${route.name} stopped at ${opName}: ${result.summary ?? "no summary"}`);
     }
   }
-  return email;
+  return credits;
 }
 
 // Triage decision: the agent picks one operation from the bounded menu, or "none".
@@ -274,14 +293,14 @@ async function routeToTriage(
   record: Record<string, unknown>,
   email: string,
   dryRun: boolean,
-): Promise<string> {
+): Promise<number> {
   const menu = Object.values(OPERATIONS)
     .filter((op) => op.mode === "operation" && op.status === "live")
     .map((op) => ({ name: op.name, description: op.description, cost: op.cost ?? "medium" }));
 
   if (dryRun) {
     logger.info("[DRY RUN] Would triage record", { route: route.name, email, menu_size: menu.length });
-    return email;
+    return 0;
   }
 
   const decision = await ai({
@@ -308,7 +327,7 @@ async function routeToTriage(
 
   if (chosen === "none" || !OPERATIONS[chosen]) {
     // A logged "none" (or an unknown pick) is a valid outcome — nothing to run.
-    return email;
+    return 0;
   }
 
   const result = await runOperation(
@@ -319,35 +338,43 @@ async function routeToTriage(
   if (!result.ok) {
     throw new Error(`Triage-selected ${chosen} reported failure: ${result.summary ?? "no summary"}`);
   }
-  return email;
+  // The triage-decision ai() call bypasses runOperation, so only the chosen
+  // operation's spend is metered into the budget here.
+  return readCredits(result);
 }
 
 // ---------------------------------------------------------------------------
 // dispatchOne — shared dispatch logic so sequential and parallel paths call
 // the same code. Returns the email on success (used by parallel path to claim).
 // ---------------------------------------------------------------------------
+interface DispatchOutcome {
+  email: string;
+  credits: number;
+}
+
 async function dispatchOne(
   route: DispatchRoute,
   record: Record<string, unknown>,
   dryRun: boolean,
-): Promise<string> {
+): Promise<DispatchOutcome> {
   const email = extractEmail(record)!;
   // Triage picks the operation per record from a bounded menu (agentic catch-all).
   if (route.target_type === "triage") {
-    return routeToTriage(route, record, email, dryRun);
+    return { email, credits: await routeToTriage(route, record, email, dryRun) };
   }
   // A chain takes precedence over a single target — it IS the per-record pipeline.
   if (route.target_chain?.length) {
-    return runChain(route, email, dryRun);
+    return { email, credits: await runChain(route, email, dryRun) };
   }
+  let credits = 0;
   if (route.target_type === "operation") {
-    await routeToOperation(route.target_name, email, dryRun, route.tier_override, route.model_override);
+    credits = await routeToOperation(route.target_name, email, dryRun, route.tier_override, route.model_override);
   } else if (route.target_type === "task") {
     await routeToTask(route.target_name, email, route.name, dryRun);
   } else {
-    await routeToSubagent(route, email, dryRun);
+    credits = await routeToSubagent(route, email, dryRun);
   }
-  return email;
+  return { email, credits };
 }
 
 export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
@@ -360,6 +387,8 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
     dispatched: 0,
     errors: 0,
     skipped_paused: false,
+    skipped_budget: false,
+    credits_spent: 0,
     dry_run: dryRun,
     duration_ms: 0,
   };
@@ -368,6 +397,19 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
   if (config.status === "paused" || config.status === "error") {
     logger.info("Dispatcher: orchestrator paused, skipping dispatch", { status: config.status });
     result.skipped_paused = true;
+    result.duration_ms = Date.now() - start;
+    return result;
+  }
+
+  // Daily budget ceiling: if today's spend already meets the cap, skip the whole
+  // cycle. Dry-run cycles never spend, so they are exempt from the pre-check.
+  const budget = await checkDailyBudget();
+  if (!dryRun && budget.exhausted) {
+    logger.warn("Dispatcher: daily budget exhausted, skipping dispatch", {
+      budget: budget.budget,
+      spend_today: budget.spendToday,
+    });
+    result.skipped_budget = true;
     result.duration_ms = Date.now() - start;
     return result;
   }
@@ -383,7 +425,20 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
   // Within each route, records are sequential, parallel, or batch depending on route config.
   const claimedEmails = new Set<string>();
 
+  // Budget accounting: accumulate this cycle's spend and stop opening new routes
+  // once the running total (prior spend + this cycle) would exceed the cap.
+  const budgetActive = budget.budget > 0 && !dryRun;
+  const budgetRemainingAtStart = budget.budget - budget.spendToday;
+
   for (const route of routes) {
+    if (budgetActive && result.credits_spent >= budgetRemainingAtStart) {
+      logger.warn("Dispatcher: daily budget reached mid-cycle, stopping further routes", {
+        credits_spent: result.credits_spent,
+        remaining_at_start: budgetRemainingAtStart,
+      });
+      result.skipped_budget = true;
+      break;
+    }
     result.routes_evaluated++;
     const maxPerCycle = Number(route.max_per_cycle ?? 50);
 
@@ -503,6 +558,7 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
           for (const email of emailsInBatch) { claimedEmails.add(email); }
           result.leads_claimed += emailsInBatch.length;
           result.dispatched++;
+          result.credits_spent += readCredits(batchOpResult);
         } catch (err) {
           result.errors++;
           const errMsg = err instanceof Error ? err.message : String(err);
@@ -541,9 +597,10 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
 
       for (const outcome of outcomes) {
         if (outcome.status === "fulfilled") {
-          claimedEmails.add(outcome.value);
+          claimedEmails.add(outcome.value.email);
           result.leads_claimed++;
           result.dispatched++;
+          result.credits_spent += outcome.value.credits;
         } else {
           result.errors++;
           const errMsg = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
@@ -566,12 +623,18 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
         if (!email || claimedEmails.has(email)) continue;
 
         try {
-          await dispatchOne(route, record, dryRun);
+          const outcome = await dispatchOne(route, record, dryRun);
           // Only claim after successful dispatch so errors don't silently blacklist the email
           claimedEmails.add(email);
           result.leads_claimed++;
           result.dispatched++;
+          result.credits_spent += outcome.credits;
           routeDispatched++;
+          // Mid-route budget stop: don't keep spending past the cap within a route.
+          if (budgetActive && result.credits_spent >= budgetRemainingAtStart) {
+            result.skipped_budget = true;
+            break;
+          }
         } catch (err) {
           result.errors++;
           logger.warn("Dispatcher: dispatch error (sequential)", { route: route.name, email, error: String(err) });
@@ -583,6 +646,11 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
 
   if (result.errors === 0) {
     await resetOrchestratorErrors();
+  }
+
+  // Record this cycle's spend once (approximate accounting — see orchestrator notes).
+  if (!dryRun && result.credits_spent > 0) {
+    await recordDailySpend(result.credits_spent);
   }
 
   result.duration_ms = Date.now() - start;
