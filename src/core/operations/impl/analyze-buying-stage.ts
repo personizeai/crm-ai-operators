@@ -150,18 +150,17 @@ Contact + engagement context:
 ${recordContext}`,
           context: `# Signal Definitions\n\n${guidelines["signal-definitions"]}`,
           outputs: StageOutputSchema,
+          // buying_stage and next_best_action are auto-synced to contact properties by the platform.
+          serverOutputs: [
+            { name: "buying_stage",     collectionId: "contacts", propertyId: "buying_stage" },
+            { name: "next_best_action", collectionId: "contacts", propertyId: "next_best_action" },
+          ],
+          memorize: { email: contact.email, type: "Contact" },
           temperature: 0.2,
           maxTokens: 400,
         });
 
-        const now = new Date().toISOString();
-        for (const [propertyName, value] of Object.entries({
-          buying_stage: result.output.buying_stage,
-          next_best_action: result.output.next_best_action,
-          buying_stage_updated_at: now,
-        })) {
-          await setProperty({ type: "contact", email: contact.email }, propertyName, value);
-        }
+        await setProperty({ type: "contact", email: contact.email }, "buying_stage_updated_at", new Date().toISOString());
 
         await workspace.appendUpdate(
           { email: contact.email },

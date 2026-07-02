@@ -65,15 +65,8 @@ async function getCompany(domain: string): Promise<CompanyRecord | null> {
   return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as CompanyRecord | null;
 }
 
-async function writeScoreBack(email: string, score: number, reason: string): Promise<void> {
-  const now = new Date().toISOString();
-  for (const [propertyName, value] of Object.entries({
-    ai_score: score,
-    ai_score_reason: reason,
-    ai_score_updated_at: now,
-  })) {
-    await setProperty({ type: "contact", email }, propertyName, value);
-  }
+async function writeTimestamp(email: string): Promise<void> {
+  await setProperty({ type: "contact", email }, "ai_score_updated_at", new Date().toISOString());
 }
 
 export const scoreLeadQuality: OperationEntry = {
@@ -165,11 +158,17 @@ Contact + company:
 ${recordContext}`,
           context: `# ICP Definition\n\n${guidelines["icp-definition"]}\n\n---\n\n# Contact Qualification\n\n${guidelines["contact-qualification"]}\n\n---\n\n# Lead Scoring Policy\n\n${guidelines["lead-scoring-policy"]}`,
           outputs: ScoreOutputSchema,
+          // ai_score and ai_score_reason are auto-synced to contact properties by the platform.
+          serverOutputs: [
+            { name: "ai_score",        collectionId: "contacts", propertyId: "ai_score" },
+            { name: "ai_score_reason", collectionId: "contacts", propertyId: "ai_score_reason" },
+          ],
+          memorize: { email: contact.email, type: "Contact" },
           temperature: 0.2,
           maxTokens: 300,
         });
 
-        await writeScoreBack(contact.email, result.output.ai_score, result.output.ai_score_reason);
+        await writeTimestamp(contact.email);
 
         await workspace.appendUpdate(
           { email: contact.email },

@@ -54,8 +54,8 @@ async function listContacts(filter: Filter): Promise<ContactRecord[]> {
 }
 
 async function persistContactResearch(email: string, output: ContactResearch): Promise<void> {
-  // current_title/seniority/function/communication_style are auto-synced via serverOutputs mapping.
-  // Keep manual writes for: computed timestamp, seniority "unknown" guard, pain_points join transform.
+  // current_title/function/communication_style are auto-synced via serverOutputs mapping.
+  // Keep manual writes for: computed timestamp, seniority "unknown" guard, pain_points array join.
   if (output.current_title) {
     await setProperty({ type: "contact", email }, "job_title_updated_at", new Date().toISOString());
   }

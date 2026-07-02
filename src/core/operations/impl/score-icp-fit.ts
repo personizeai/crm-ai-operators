@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { retrieveRecords } from "../../lib/recall.js";
-import { setProperty } from "../../lib/persist.js";
 import { ai } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
@@ -46,21 +45,6 @@ async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
   })) as CompanyRecord[];
 }
 
-async function writeScoreBack(
-  domain: string,
-  score: number,
-  reason: string,
-): Promise<void> {
-  try {
-    await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_score", score);
-    await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_reason", reason);
-  } catch (error) {
-    logger.warn("Failed to write ICP score back to Personize", {
-      domain,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
 
 export const scoreIcpFit: OperationEntry = {
   name: "score.icp-fit",
@@ -152,13 +136,17 @@ export const scoreIcpFit: OperationEntry = {
           instructions: `Score this company against the ICP definition. Return a JSON object with:\n- icp_fit_score: integer 0-100 (40% firmographic fit, 30% buying signals, 20% engagement, 10% champion potential)\n- icp_fit_reason: one-sentence explanation citing the strongest 1-2 factors\n\nCompany:\n${companyContext}`,
           context: `# ICP Definition\n\n${icpGuideline}`,
           outputs: ScoreOutputSchema,
+          // icp_fit_score and icp_fit_reason are auto-synced to company properties by the platform.
+          serverOutputs: [
+            { name: "icp_fit_score", collectionId: "companies", propertyId: "icp_fit_score" },
+            { name: "icp_fit_reason", collectionId: "companies", propertyId: "icp_fit_reason" },
+          ],
+          memorize: { websiteUrl: company.domain, type: "Company" },
           temperature: 0.2,
           maxTokens: 300,
         });
 
         const { icp_fit_score, icp_fit_reason } = result.output;
-
-        await writeScoreBack(company.domain, icp_fit_score, icp_fit_reason);
 
         await workspace.appendUpdate(
           { website_url: company.domain },
