@@ -8,3 +8,4 @@ dist/
 *.key
 data/audit/*.jsonl
 data/state/*.txt
+~$*
