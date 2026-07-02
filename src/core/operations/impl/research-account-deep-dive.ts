@@ -60,17 +60,9 @@ async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
 }
 
 async function persistFindings(domain: string, output: ResearchOutput): Promise<void> {
-  await setProperty({ type: "company", websiteUrl: domain }, "context", output.context_summary);
+  // context/industry/business_model/employee_count are auto-synced via serverOutputs mapping.
+  // Only write what cannot be mapped: computed timestamp and multi-record writes.
   await setProperty({ type: "company", websiteUrl: domain }, "context_updated_at", new Date().toISOString());
-  if (output.industry) {
-    await setProperty({ type: "company", websiteUrl: domain }, "industry", output.industry);
-  }
-  if (output.business_model) {
-    await setProperty({ type: "company", websiteUrl: domain }, "business_model", output.business_model);
-  }
-  if (output.employee_count) {
-    await setProperty({ type: "company", websiteUrl: domain }, "employee_count", output.employee_count);
-  }
 
   for (const signal of output.signals) {
     const signal_id = `sig_${Date.now().toString(36)}_${randomUUID().slice(0, 6)}`;
@@ -185,6 +177,15 @@ Return a JSON object with these exact fields:
 - stakeholders: array of { full_name, job_title, linkedin_url?, function? }
 - next_action: string (optional)`,
           outputs: ResearchOutputSchema,
+          // Mapped outputs are auto-synced to company properties by the platform.
+          // Unmapped outputs (signals, stakeholders, next_action) are returned in result.output only.
+          serverOutputs: [
+            { name: "context_summary", collectionId: "companies", propertyId: "context",        required: true },
+            { name: "industry",        collectionId: "companies", propertyId: "industry" },
+            { name: "business_model",  collectionId: "companies", propertyId: "business_model" },
+            { name: "employee_count",  collectionId: "companies", propertyId: "employee_count" },
+          ],
+          memorize: { websiteUrl: domain, type: "Company" },
           context: `Company domain: ${domain}\nCurrent industry: ${company.industry ?? "unknown"}\nLifecycle: ${company.lifecycle_stage ?? "unknown"}`,
           tier: "pro",
           mcpTools: [{ mcpId: "tavily" }],

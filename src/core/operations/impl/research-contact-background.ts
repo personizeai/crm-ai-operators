@@ -54,20 +54,17 @@ async function listContacts(filter: Filter): Promise<ContactRecord[]> {
 }
 
 async function persistContactResearch(email: string, output: ContactResearch): Promise<void> {
+  // current_title/seniority/function/communication_style are auto-synced via serverOutputs mapping.
+  // Keep manual writes for: computed timestamp, seniority "unknown" guard, pain_points join transform.
   if (output.current_title) {
-    await setProperty({ type: "contact", email }, "job_title", output.current_title);
     await setProperty({ type: "contact", email }, "job_title_updated_at", new Date().toISOString());
   }
   if (output.seniority && output.seniority !== "unknown") {
+    // Mapping would write "unknown" literally — guard here instead.
     await setProperty({ type: "contact", email }, "seniority", output.seniority);
   }
-  if (output.function) {
-    await setProperty({ type: "contact", email }, "function", output.function);
-  }
-  if (output.communication_style) {
-    await setProperty({ type: "contact", email }, "communication_style", output.communication_style);
-  }
   if (output.pain_points.length > 0) {
+    // pain_points is a string property; join array before writing.
     await setProperty({ type: "contact", email }, "pain_points", output.pain_points.join(" | "));
   }
 }
@@ -151,6 +148,15 @@ Return a JSON object with these exact fields:
 - recent_moves: array of { type, summary, occurred_at? }
 - source_urls: array of strings (sources cited)`,
           outputs: ContactResearchSchema,
+          // current_title and function/communication_style are auto-synced to contact properties.
+          // seniority excluded: needs "unknown" guard (handled in persistContactResearch).
+          // pain_points excluded: array needs join transform before writing (string property).
+          serverOutputs: [
+            { name: "current_title",       collectionId: "contacts", propertyId: "job_title" },
+            { name: "function",            collectionId: "contacts", propertyId: "function" },
+            { name: "communication_style", collectionId: "contacts", propertyId: "communication_style" },
+          ],
+          memorize: { email, type: "Contact" },
           context: `Contact: ${displayName}\nEmail: ${email}\nCurrent title: ${contact.job_title ?? "unknown"}\nCompany: ${contact.company_domain ?? "unknown"}`,
           tier: "pro",
           mcpTools: [{ mcpId: "tavily" }],
