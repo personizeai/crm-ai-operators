@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { client } from "../config.js";
 import { logger } from "./logger.js";
+import { reportUsage } from "./usage.js";
 
 // -----------------------------------------------------------------------------
 // Types — mirror the relevant subset of @personize/sdk PromptOptions
@@ -239,9 +240,18 @@ async function runAi<T extends z.ZodTypeAny>(
     );
   }
 
-  return Array.isArray(options.instructions)
-    ? runMultiStep(options, ai, verb)
-    : runSinglePrompt(options, ai, verb);
+  const result = Array.isArray(options.instructions)
+    ? await runMultiStep(options, ai, verb)
+    : await runSinglePrompt(options, ai, verb);
+
+  // Report cost to the active per-run usage sink (no-op outside one).
+  if (result.usage) {
+    reportUsage({
+      credits: result.usage.creditsCharged,
+      tokens: result.usage.totalTokens ?? result.usage.tokens,
+    });
+  }
+  return result;
 }
 
 // -----------------------------------------------------------------------------

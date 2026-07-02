@@ -1,9 +1,12 @@
+import { z } from "zod";
 import { logger } from "../lib/logger.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import { retrieveRecords } from "../lib/recall.js";
 import { compileFilter, type CompiledFilter } from "../lib/filter.js";
 import { createTask } from "../lib/tasks.js";
 import { isDryRun } from "../lib/dry-run.js";
+import { ai, type Tier } from "../lib/ai.js";
+import { loadGuideline } from "../lib/governance.js";
 import { OPERATIONS } from "../operations/registry.js";
 import { runOperation } from "../runtime/operation-runner.js";
 import {
@@ -75,6 +78,13 @@ interface DispatchRoute {
   target_type: "operation" | "subagent" | "task";
   target_name: string;
   instructions_name?: string;
+  /**
+   * Per-record operation chain: each record flows through these operations in order,
+   * stopping at the first that reports ok:false. Overrides target_type/target_name.
+   * Chains are inherently per-record — ignored (with a warning) in batch mode.
+   * Example: ["research.contact-background", "score.lead-quality", "generate.outreach-sequence"]
+   */
+  target_chain?: string[];
   max_per_cycle?: number;
   /** When true, records within this route are dispatched concurrently. Ignored in batch mode. */
   parallel?: boolean;
@@ -171,6 +181,78 @@ async function routeToTask(
   });
 }
 
+// Generic result envelope for a subagent-target route. The guideline named by
+// instructions_name is the actual behavior; this schema just captures what it did.
+const SubagentResultSchema = z.object({
+  summary: z.string().describe("What was done for this record"),
+  actions_taken: z.array(z.string()).optional().describe("Concrete actions the subagent took"),
+});
+
+// ---------------------------------------------------------------------------
+// routeToSubagent — real implementation of target_type: "subagent".
+// Loads the route's instructions_name guideline as the behavior spec and runs an
+// autonomous agent (tools on) against the record. Replaces the former task stub.
+// ---------------------------------------------------------------------------
+async function routeToSubagent(route: DispatchRoute, email: string, dryRun: boolean): Promise<void> {
+  if (dryRun) {
+    logger.info("[DRY RUN] Would run subagent", { route: route.name, email });
+    return;
+  }
+  if (!route.instructions_name) {
+    throw new Error(`Subagent route ${route.name} requires instructions_name (the guideline to run).`);
+  }
+  const instructions = await loadGuideline(route.instructions_name);
+  if (!instructions) {
+    throw new Error(
+      `Subagent route ${route.name}: guideline '${route.instructions_name}' not found. Run setup.apply to install it.`,
+    );
+  }
+  await ai({
+    autonomous: true,
+    instructions:
+      `${instructions}\n\n---\n\nApply the guidance above to the record identified by ${email}. ` +
+      `Use your tools to gather what you need, then act. Summarize what you did.`,
+    outputs: SubagentResultSchema,
+    memorize: { email, type: "Contact" },
+    tier: (route.tier_override as Tier | undefined) ?? "pro",
+    model: route.model_override,
+    metadata: { recordId: email },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// runChain — per-record operation pipeline. Each record flows through every
+// operation in target_chain in order, stopping at the first ok:false.
+//
+// Re-run safety: a chain that stops midway does NOT claim the email, so the next
+// cycle retries the whole chain. Earlier stages are idempotent and guarded by
+// their own skip_if, so a re-run cheaply skips already-done stages rather than
+// redoing work. A shared sessionId (deterministic per route+record) lets the
+// backend maintain continuity across stages for operations that read input.sessionId.
+// ---------------------------------------------------------------------------
+async function runChain(route: DispatchRoute, email: string, dryRun: boolean): Promise<string> {
+  const chain = route.target_chain ?? [];
+  const sessionId = `chain_${route.route_id}_${email}`;
+  for (const opName of chain) {
+    if (!OPERATIONS[opName]) {
+      throw new Error(`Unknown operation in chain ${route.name}: ${opName}`);
+    }
+    if (dryRun) {
+      logger.info("[DRY RUN] Would run chain stage", { route: route.name, operation: opName, email });
+      continue;
+    }
+    const result = await runOperation(
+      opName,
+      { email, sessionId },
+      { tierOverride: route.tier_override, modelOverride: route.model_override },
+    );
+    if (!result.ok) {
+      throw new Error(`Chain ${route.name} stopped at ${opName}: ${result.summary ?? "no summary"}`);
+    }
+  }
+  return email;
+}
+
 // ---------------------------------------------------------------------------
 // dispatchOne — shared dispatch logic so sequential and parallel paths call
 // the same code. Returns the email on success (used by parallel path to claim).
@@ -180,14 +262,16 @@ async function dispatchOne(
   email: string,
   dryRun: boolean,
 ): Promise<string> {
+  // A chain takes precedence over a single target — it IS the per-record pipeline.
+  if (route.target_chain?.length) {
+    return runChain(route, email, dryRun);
+  }
   if (route.target_type === "operation") {
     await routeToOperation(route.target_name, email, dryRun, route.tier_override, route.model_override);
   } else if (route.target_type === "task") {
     await routeToTask(route.target_name, email, route.name, dryRun);
   } else {
-    // subagent: stub — create a task as fallback until subagent target is implemented
-    logger.info("Dispatcher: subagent target type not yet implemented; creating task fallback", { route: route.name });
-    await routeToTask("subagent-queued", email, route.name, dryRun);
+    await routeToSubagent(route, email, dryRun);
   }
   return email;
 }
@@ -257,7 +341,15 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
       continue;
     }
 
-    if (route.dispatch_mode === "batch") {
+    // A chain is per-record and incompatible with batch's single-call model.
+    if (route.dispatch_mode === "batch" && route.target_chain?.length) {
+      logger.warn(
+        "Dispatcher: target_chain is ignored when dispatch_mode=batch (chains are per-record)",
+        { route: route.name },
+      );
+    }
+
+    if (route.dispatch_mode === "batch" && !route.target_chain?.length) {
       // -----------------------------------------------------------------------
       // BATCH pattern: one operation call receives the full record list.
       // The operation receives { records: [...] } and skips its own recall.
