@@ -25,6 +25,7 @@ import { reportPipelineHealth } from "./impl/report-pipeline-health.js";
 import { reportWinLoss } from "./impl/report-win-loss.js";
 import { generateMutualActionPlan } from "./impl/generate-mutual-action-plan.js";
 import { syncNormalizeLifecycle } from "./impl/sync-normalize-lifecycle.js";
+import { syncCallTranscriptsBulk } from "./impl/sync-call-transcripts-bulk.js";
 
 const ALL: OperationEntry[] = [
   // setup
@@ -36,6 +37,7 @@ const ALL: OperationEntry[] = [
   syncPushProperties,
   syncPullEngagements,
   syncNormalizeLifecycle,
+  syncCallTranscriptsBulk,
   // research
   researchAccountDeepDive,
   researchContactBackground,
