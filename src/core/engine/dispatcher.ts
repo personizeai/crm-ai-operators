@@ -21,6 +21,41 @@ export interface IncomingEvent {
   received_at: string;
 }
 
+// ---------------------------------------------------------------------------
+// DispatchRoute — stored in the "dispatch-routes" Personize collection.
+//
+// Re-run prevention strategy (filter-based, no operation-run table needed):
+//   Include a staleness condition in filter_json so only records that NEED
+//   processing are fetched. Example — skip contacts updated in the last 60d:
+//   { "collection": "contact", "where": { "job_title_updated_at": { "lt": "now-60d" } } }
+//   The skip_if rule inside each operation is a second-line defence for cases
+//   where the filter cannot express the staleness logic (e.g. enum checks).
+//   At scale, the filter approach is far cheaper: Personize evaluates it
+//   server-side (indexed) so you only dispatch what actually needs work,
+//   rather than dispatching everything and paying per-record recall to skip.
+//
+// Dispatch execution patterns:
+//   sequential (default, parallel: false):
+//     Records within a route are processed one at a time. Errors stay
+//     isolated, rate limits are respected, and `maxPerCycle` is a hard cap.
+//     Use for operations that write back to the same record (avoid races),
+//     high-cost operations, or when you want predictable throughput.
+//
+//   parallel (parallel: true):
+//     All eligible records for a route are dispatched concurrently using
+//     Promise.allSettled. Wall-clock drops from O(n × latency) to O(latency).
+//     Use for independent operations — research, enrichment, scoring — where
+//     each record is self-contained and there is no shared write target.
+//     One failure does not block the rest.
+//
+// Tier/model override:
+//   Set tier_override or model_override on a route to control cost without
+//   touching operation code. The operation falls back to its own default when
+//   the route provides nothing. Example: route a "quick-scan" route to
+//   tier_override: "basic" and the high-priority research route to
+//   tier_override: "ultra".
+// ---------------------------------------------------------------------------
+
 interface DispatchRoute {
   route_id: string;
   priority: number;
@@ -31,6 +66,12 @@ interface DispatchRoute {
   target_name: string;
   instructions_name?: string;
   max_per_cycle?: number;
+  /** When true, records within this route are dispatched concurrently (Promise.allSettled). */
+  parallel?: boolean;
+  /** Override the AI tier for all operations dispatched by this route. */
+  tier_override?: string;
+  /** Override the AI model for all operations dispatched by this route (BYOK). */
+  model_override?: string;
   [key: string]: unknown;
 }
 
@@ -70,6 +111,8 @@ async function routeToOperation(
   targetName: string,
   email: string,
   dryRun: boolean,
+  tierOverride?: string,
+  modelOverride?: string,
 ): Promise<void> {
   // Unknown operation = configuration error; throw so caller increments errors + claims nothing
   if (!OPERATIONS[targetName]) {
@@ -80,7 +123,7 @@ async function routeToOperation(
     return;
   }
   // runOperation(name, input, options) — handles runId + dryRun internally
-  await runOperation(targetName, { email });
+  await runOperation(targetName, { email }, { tierOverride, modelOverride });
 }
 
 async function routeToTask(
@@ -102,6 +145,27 @@ async function routeToTask(
     custom_key_value: email,
     created_by: "dispatcher",
   });
+}
+
+// ---------------------------------------------------------------------------
+// dispatchOne — shared dispatch logic so sequential and parallel paths call
+// the same code. Returns the email on success (used by parallel path to claim).
+// ---------------------------------------------------------------------------
+async function dispatchOne(
+  route: DispatchRoute,
+  email: string,
+  dryRun: boolean,
+): Promise<string> {
+  if (route.target_type === "operation") {
+    await routeToOperation(route.target_name, email, dryRun, route.tier_override, route.model_override);
+  } else if (route.target_type === "task") {
+    await routeToTask(route.target_name, email, route.name, dryRun);
+  } else {
+    // subagent: stub — create a task as fallback until subagent target is implemented
+    logger.info("Dispatcher: subagent target type not yet implemented; creating task fallback", { route: route.name });
+    await routeToTask("subagent-queued", email, route.name, dryRun);
+  }
+  return email;
 }
 
 export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
@@ -133,6 +197,8 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
     return result;
   }
 
+  // Routes are always processed sequentially (priority order).
+  // Within each route, records are sequential or parallel depending on route.parallel.
   const claimedEmails = new Set<string>();
 
   for (const route of routes) {
@@ -167,31 +233,64 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
       continue;
     }
 
-    let routeDispatched = 0;
-    for (const record of records) {
-      if (routeDispatched >= maxPerCycle) break;
-      const email = extractEmail(record);
-      if (!email || claimedEmails.has(email)) continue;
+    if (route.parallel) {
+      // -----------------------------------------------------------------------
+      // PARALLEL pattern: all eligible records for this route run concurrently.
+      // Best for independent per-record operations (research, enrichment, scoring).
+      // Wall-clock = slowest record, not sum of all records.
+      //
+      // Emails are pre-filtered before dispatch to avoid races on claimedEmails.
+      // Promise.allSettled ensures one failure does not cancel the rest.
+      // -----------------------------------------------------------------------
+      const eligible = records
+        .filter((r) => {
+          const email = extractEmail(r);
+          return email && !claimedEmails.has(email);
+        })
+        .slice(0, maxPerCycle);
 
-      try {
-        if (route.target_type === "operation") {
-          await routeToOperation(route.target_name, email, dryRun);
-        } else if (route.target_type === "task") {
-          await routeToTask(route.target_name, email, route.name, dryRun);
+      const outcomes = await Promise.allSettled(
+        eligible.map((record) => dispatchOne(route, extractEmail(record)!, dryRun)),
+      );
+
+      for (const outcome of outcomes) {
+        if (outcome.status === "fulfilled") {
+          claimedEmails.add(outcome.value);
+          result.leads_claimed++;
+          result.dispatched++;
         } else {
-          // subagent: stub — create a task as fallback
-          logger.info("Dispatcher: subagent target type not yet implemented; creating task fallback", { route: route.name });
-          await routeToTask("subagent-queued", email, route.name, dryRun);
+          result.errors++;
+          const errMsg = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+          logger.warn("Dispatcher: dispatch error (parallel)", { route: route.name, error: errMsg });
+          await bumpOrchestratorError(`Dispatch error on route ${route.name}: ${errMsg}`);
         }
-        // Only claim after successful dispatch so errors don't silently blacklist the email
-        claimedEmails.add(email);
-        result.leads_claimed++;
-        result.dispatched++;
-        routeDispatched++;
-      } catch (err) {
-        result.errors++;
-        logger.warn("Dispatcher: dispatch error", { route: route.name, email, error: String(err) });
-        await bumpOrchestratorError(`Dispatch error on route ${route.name} for ${email}: ${String(err)}`);
+      }
+    } else {
+      // -----------------------------------------------------------------------
+      // SEQUENTIAL pattern (default): one record at a time.
+      // Best for operations that write back to shared state, high-cost AI calls
+      // where you want predictable throughput, or when debugging dispatch order.
+      //
+      // Stops at maxPerCycle regardless of how many records the filter returned.
+      // -----------------------------------------------------------------------
+      let routeDispatched = 0;
+      for (const record of records) {
+        if (routeDispatched >= maxPerCycle) break;
+        const email = extractEmail(record);
+        if (!email || claimedEmails.has(email)) continue;
+
+        try {
+          await dispatchOne(route, email, dryRun);
+          // Only claim after successful dispatch so errors don't silently blacklist the email
+          claimedEmails.add(email);
+          result.leads_claimed++;
+          result.dispatched++;
+          routeDispatched++;
+        } catch (err) {
+          result.errors++;
+          logger.warn("Dispatcher: dispatch error (sequential)", { route: route.name, email, error: String(err) });
+          await bumpOrchestratorError(`Dispatch error on route ${route.name} for ${email}: ${String(err)}`);
+        }
       }
     }
   }

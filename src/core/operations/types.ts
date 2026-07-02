@@ -24,6 +24,10 @@ export interface OperationContext {
   dryRun: boolean;
   mode: OperationMode;
   crm?: CrmId;
+  /** Dispatcher-supplied tier override. Operations fall back to their own default when absent. */
+  tierOverride?: string;
+  /** Dispatcher-supplied model override (BYOK). Operations fall back to their own default when absent. */
+  modelOverride?: string;
 }
 
 export interface OperationResult {

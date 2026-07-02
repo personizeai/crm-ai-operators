@@ -10,7 +10,7 @@ import type { CrmId, OperationResult } from "../operations/types.js";
 export async function runOperation(
   name: string,
   input: unknown = {},
-  options: { crm?: CrmId } = {},
+  options: { crm?: CrmId; tierOverride?: string; modelOverride?: string } = {},
 ): Promise<OperationResult> {
   const operation = OPERATIONS[name];
   if (!operation) {
@@ -39,7 +39,14 @@ export async function runOperation(
     });
 
     try {
-      const result = await operation.run(input, { runId, dryRun, mode: operation.mode, crm });
+      const result = await operation.run(input, {
+        runId,
+        dryRun,
+        mode: operation.mode,
+        crm,
+        tierOverride: options.tierOverride,
+        modelOverride: options.modelOverride,
+      });
       const completedAt = new Date().toISOString();
       const metrics = result.metrics ?? {};
       const recordsScanned =

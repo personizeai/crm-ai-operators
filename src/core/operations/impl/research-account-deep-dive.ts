@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { retrieveRecords } from "../../lib/recall.js";
 import { setProperty, setProperties } from "../../lib/persist.js";
-import { aiSubagent } from "../../lib/ai.js";
+import { aiSubagent, type Tier } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -187,7 +187,8 @@ Return a JSON object with these exact fields:
           ],
           memorize: { websiteUrl: domain, type: "Company" },
           context: `Company domain: ${domain}\nCurrent industry: ${company.industry ?? "unknown"}\nLifecycle: ${company.lifecycle_stage ?? "unknown"}`,
-          tier: "pro",
+          tier: (context.tierOverride as Tier | undefined) ?? "pro",
+          model: context.modelOverride,
           mcpTools: [{ mcpId: "tavily" }],
           metadata: { recordId: domain },
         });

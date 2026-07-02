@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { retrieveRecords } from "../../lib/recall.js";
 import { setProperty } from "../../lib/persist.js";
-import { aiSubagent } from "../../lib/ai.js";
+import { aiSubagent, type Tier } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -158,7 +158,8 @@ Return a JSON object with these exact fields:
           ],
           memorize: { email, type: "Contact" },
           context: `Contact: ${displayName}\nEmail: ${email}\nCurrent title: ${contact.job_title ?? "unknown"}\nCompany: ${contact.company_domain ?? "unknown"}`,
-          tier: "pro",
+          tier: (context.tierOverride as Tier | undefined) ?? "pro",
+          model: context.modelOverride,
           mcpTools: [{ mcpId: "tavily" }],
           metadata: { recordId: email },
         });
