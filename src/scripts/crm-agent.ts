@@ -6,6 +6,7 @@ import { isDryRun } from "../core/lib/dry-run.js";
 import { syncManifests } from "../core/setup/sync-manifests.js";
 import { registerWebhooks } from "../core/setup/register-webhooks.js";
 import { registerMcps } from "../core/setup/register-mcps.js";
+import { getRelationCatalog, checkRelations, type DeclaredRelation } from "../core/lib/graph.js";
 
 function usage(): string {
   return `Usage:
@@ -19,11 +20,14 @@ function usage(): string {
   crm-agent setup mcps
   crm-agent operate <name> [--input '<json>'] [--crm hubspot|salesforce]
   crm-agent optimize <name> [--input '<json>']
+  crm-agent relations list
+  crm-agent relations validate --input '{"fromEntityType":"contact","relations":[...]}'
 
 Examples:
   crm-agent setup apply --crm hubspot
   crm-agent setup sync guidelines
-  crm-agent operation run crm.sync-core --input '{"crm":"hubspot"}'`;
+  crm-agent operation run crm.sync-core --input '{"crm":"hubspot"}'
+  crm-agent relations list`;
 }
 
 const { positionals, values } = parseArgs({
@@ -70,6 +74,35 @@ if (scope === "setup" && action === "mcps") {
   const result = await registerMcps();
   console.log(JSON.stringify(result, null, 2));
   process.exit(result.errors.length > 0 ? 1 : 0);
+}
+
+// Graph relations: fetch the allowed-edge catalog, or validate a proposed payload.
+// This is the assistant's "fetch allowed relations / filter them" surface — the
+// same registry the save path enforces, so what validates here is what persists.
+if (scope === "relations") {
+  try {
+    if (action === "list") {
+      console.log(JSON.stringify(await getRelationCatalog(), null, 2));
+      process.exit(0);
+    }
+    if (action === "validate") {
+      const payload = (values.input ? JSON.parse(values.input) : {}) as {
+        fromEntityType?: string;
+        relations?: DeclaredRelation[];
+      };
+      if (!payload.fromEntityType) {
+        console.error(`relations validate needs --input '{"fromEntityType":"contact","relations":[...]}'`);
+        process.exit(1);
+      }
+      console.log(JSON.stringify(await checkRelations(payload.fromEntityType, payload.relations), null, 2));
+      process.exit(0);
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  console.error(usage());
+  process.exit(1);
 }
 
 let operationName = maybeName;

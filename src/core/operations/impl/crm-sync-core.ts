@@ -1,211 +1,70 @@
-import { hubspot, type HubspotContact, type HubspotCompany } from "../../../adapters/hubspot/adapter.js";
-import { salesforce } from "../../../adapters/salesforce/adapter.js";
 import { logger } from "../../lib/logger.js";
-import { saveRecords, type SaveRecordInput } from "../../lib/persist.js";
+import {
+  ensureDatasource,
+  runSync,
+  runFailed,
+  validateSync,
+  type MappingMode,
+  type SyncEntityType,
+  type SyncProvider,
+  type SyncRunResult,
+  type SyncValidation,
+} from "../../../adapters/personize-sync.js";
 import type { OperationEntry } from "../types.js";
 
-const PAGE_SIZE = 100;
-
-const HUBSPOT_CONTACT_PROPS = [
-  "email",
-  "firstname",
-  "lastname",
-  "jobtitle",
-  "phone",
-  "lifecyclestage",
-  "company",
-  "hs_object_id",
-];
-
-const HUBSPOT_COMPANY_PROPS = [
-  "domain",
-  "name",
-  "industry",
-  "numberofemployees",
-  "lifecyclestage",
-  "hs_object_id",
-];
-
-interface MappedContact {
-  email: string;
-  first_name?: string;
-  last_name?: string;
-  job_title?: string;
-  phone?: string;
-  lifecycle_stage?: string;
-  crm_source: "HubSpot" | "Salesforce";
-  crm_object_type: "contact" | "lead";
-  crm_record_id: string;
-}
-
-interface MappedCompany {
-  domain: string;
-  company_name?: string;
-  industry?: string;
-  employee_count?: number;
-  lifecycle_stage?: string;
-  crm_source: "HubSpot" | "Salesforce";
-  crm_record_id: string;
-}
-
-function mapHubspotContact(record: HubspotContact): MappedContact | null {
-  const p = record.properties;
-  if (!p.email) return null;
-  return {
-    email: p.email,
-    first_name: p.firstname || undefined,
-    last_name: p.lastname || undefined,
-    job_title: p.jobtitle || undefined,
-    phone: p.phone || undefined,
-    lifecycle_stage: p.lifecyclestage || undefined,
-    crm_source: "HubSpot",
-    crm_object_type: "contact",
-    crm_record_id: record.id,
-  };
-}
-
-function mapHubspotCompany(record: HubspotCompany): MappedCompany | null {
-  const p = record.properties;
-  if (!p.domain) return null;
-  const employeeCount = p.numberofemployees ? Number(p.numberofemployees) : undefined;
-  return {
-    domain: p.domain.toLowerCase().replace(/^www\./, ""),
-    company_name: p.name || undefined,
-    industry: p.industry || undefined,
-    employee_count: Number.isFinite(employeeCount) ? employeeCount : undefined,
-    lifecycle_stage: p.lifecyclestage || undefined,
-    crm_source: "HubSpot",
-    crm_record_id: record.id,
-  };
-}
-
-interface SalesforceContactRow {
-  Id: string;
-  Email: string | null;
-  FirstName?: string | null;
-  LastName?: string | null;
-  Title?: string | null;
-  Phone?: string | null;
-}
-
-function mapSalesforceContact(record: SalesforceContactRow): MappedContact | null {
-  if (!record.Email) return null;
-  return {
-    email: record.Email,
-    first_name: record.FirstName ?? undefined,
-    last_name: record.LastName ?? undefined,
-    job_title: record.Title ?? undefined,
-    phone: record.Phone ?? undefined,
-    crm_source: "Salesforce",
-    crm_object_type: "contact",
-    crm_record_id: record.Id,
-  };
-}
-
-const TYPE_FOR_SLUG: Record<string, string> = {
-  contacts: "contact",
-  companies: "company",
+// Default objects to import per provider. Salesforce companies (Account) ship a
+// template too, but we keep the conservative default until verified end-to-end.
+const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
+  hubspot: ["contact", "company"],
+  salesforce: ["contact"],
+  apollo: ["contact"],
 };
 
-async function batchStore<T extends { email?: string; domain?: string }>(
-  collectionSlug: string,
-  records: T[],
-  primaryKeyField: "email" | "domain",
-): Promise<number> {
-  if (records.length === 0) return 0;
-  const type = TYPE_FOR_SLUG[collectionSlug] ?? collectionSlug;
-  let stored = 0;
-  for (let i = 0; i < records.length; i += PAGE_SIZE) {
-    const chunk = records.slice(i, i + PAGE_SIZE);
-    try {
-      const items: SaveRecordInput[] = chunk.map((r) => ({
-        ...(primaryKeyField === "email"
-          ? { email: r.email }
-          : { websiteUrl: r.domain }),
-        properties: r,
-      }));
-      await saveRecords(type, collectionSlug, items);
-      stored += chunk.length;
-    } catch (error) {
-      logger.warn("batchStore chunk failed", {
-        collection: collectionSlug,
-        offset: i,
-        size: chunk.length,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+// Providers Personize ships no builtin sync template for — their mappings must be
+// resolved via AI (suggestMappings → manual datasource).
+const PROVIDERS_WITHOUT_TEMPLATES = new Set(["apollo", "apollo-oauth"]);
+
+function resolveObjects(provider: SyncProvider, requested?: unknown): SyncEntityType[] {
+  if (Array.isArray(requested) && requested.length > 0) {
+    return requested.filter((o): o is SyncEntityType => o === "contact" || o === "company" || o === "deal");
   }
-  return stored;
+  return DEFAULT_OBJECTS[provider] ?? ["contact"];
 }
 
-async function syncHubspotContacts(): Promise<{ scanned: number; stored: number }> {
-  let after: string | undefined;
-  const all: MappedContact[] = [];
-  let pageCount = 0;
-  while (true) {
-    const page = await hubspot.contacts.list({
-      limit: PAGE_SIZE,
-      after,
-      properties: HUBSPOT_CONTACT_PROPS,
-    });
-    pageCount++;
-    for (const record of page.results) {
-      const mapped = mapHubspotContact(record);
-      if (mapped) all.push(mapped);
-    }
-    if (!page.paging?.next?.after) break;
-    after = page.paging.next.after;
-    // Safety cap: bail after 50 pages (5000 contacts) to avoid runaway in initial test runs.
-    if (pageCount >= 50) {
-      logger.warn("HubSpot contact sync hit safety cap of 50 pages", { pageCount });
-      break;
-    }
-  }
-  const stored = await batchStore("contacts", all, "email");
-  return { scanned: all.length, stored };
+/** Coerce a record cap from input; ignore non-positive / non-integer values. */
+export function resolveMaxRecords(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
-async function syncHubspotCompanies(): Promise<{ scanned: number; stored: number }> {
-  let after: string | undefined;
-  const all: MappedCompany[] = [];
-  let pageCount = 0;
-  while (true) {
-    const page = await hubspot.companies.list({
-      limit: PAGE_SIZE,
-      after,
-      properties: HUBSPOT_COMPANY_PROPS,
-    });
-    pageCount++;
-    for (const record of page.results) {
-      const mapped = mapHubspotCompany(record);
-      if (mapped) all.push(mapped);
-    }
-    if (!page.paging?.next?.after) break;
-    after = page.paging.next.after;
-    if (pageCount >= 50) {
-      logger.warn("HubSpot company sync hit safety cap of 50 pages", { pageCount });
-      break;
-    }
-  }
-  const stored = await batchStore("companies", all, "domain");
-  return { scanned: all.length, stored };
+/**
+ * Pick the mapping strategy. Honor an explicit request; otherwise default to `ai`
+ * for template-less providers (Apollo) and `auto` (template-then-AI) for the rest.
+ */
+export function resolveMappingMode(requested: unknown, provider: SyncProvider): MappingMode {
+  if (requested === "template" || requested === "ai" || requested === "auto") return requested;
+  return PROVIDERS_WITHOUT_TEMPLATES.has(provider) ? "ai" : "auto";
 }
 
-async function syncSalesforceContacts(): Promise<{ scanned: number; stored: number }> {
-  // Single-page SOQL for now. For production, the salesforce adapter needs queryAll() that follows nextRecordsUrl.
-  const soql = `SELECT Id, Email, FirstName, LastName, Title, Phone FROM Contact WHERE Email != null LIMIT 200`;
-  const result = await salesforce.query<SalesforceContactRow>(soql);
-  const mapped = result.records
-    .map(mapSalesforceContact)
-    .filter((c): c is MappedContact => c !== null);
-  const stored = await batchStore("contacts", mapped, "email");
-  return { scanned: mapped.length, stored };
+/** Map a low-level "connection missing" error to actionable guidance. */
+function explain(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/connection_not_found|connection_disconnected|not.?connected/i.test(message)) {
+    return `${message} — connect the CRM once at https://app.personize.ai → Integrations, then re-run.`;
+  }
+  return message;
 }
 
 export const crmSyncCore: OperationEntry = {
   name: "crm.sync-core",
   mode: "operation",
-  description: "Sync CRM contacts (HubSpot+Salesforce) and companies (HubSpot) into Personize via paginated pull + batch memorize.",
+  description:
+    "Import CRM records (HubSpot/Salesforce/Apollo contacts and companies) into Personize via Personize-managed " +
+    "sync-in. Connection (OAuth), pagination, field mapping, dedupe, and association linking all run inside Personize " +
+    "— this operation only selects the provider + objects and triggers/polls the managed datasource. Optional inputs: " +
+    "`max_records` caps records per run (bounded/test syncs); `mapping_mode` is `template` | `ai` | `auto` (default " +
+    "`auto`, or `ai` for providers like Apollo that ship no builtin template). Connect the CRM once in the Personize " +
+    "dashboard (Integrations).",
   category: "sync",
   status: "live",
   idempotent: true,
@@ -213,65 +72,93 @@ export const crmSyncCore: OperationEntry = {
   run_mode: "on-trigger",
   guidelines_required: ["crm-writeback-policy", "data-hygiene"],
   run: async (input, context) => {
-    const inputObj = (input ?? {}) as { crm?: string };
-    const crm = inputObj.crm ?? context.crm ?? "hubspot";
+    const inputObj = (input ?? {}) as {
+      crm?: string;
+      provider?: string;
+      objects?: unknown;
+      max_records?: unknown;
+      maxRecords?: unknown;
+      mapping_mode?: unknown;
+      mappingMode?: unknown;
+    };
+    const provider = (inputObj.provider ?? inputObj.crm ?? context.crm ?? "hubspot") as SyncProvider;
+    const objects = resolveObjects(provider, inputObj.objects);
+    const maxRecords = resolveMaxRecords(inputObj.max_records ?? inputObj.maxRecords);
+    const mappingMode = resolveMappingMode(inputObj.mapping_mode ?? inputObj.mappingMode, provider);
+    const capNote = maxRecords != null ? ` (max ${maxRecords})` : "";
 
     if (context.dryRun) {
+      // Validate each object against Personize (run dryRun:true) — no writes.
+      const validations: SyncValidation[] = [];
+      for (const entityType of objects) {
+        validations.push(await validateSync(provider, entityType, "in"));
+      }
+      const allValid = validations.every((v) => v.ok);
+      const detail = validations.map((v) => `${v.entityType}: ${v.note}`).join(" | ");
       return {
-        ok: true,
+        ok: allValid,
         runId: context.runId,
         operation: "crm.sync-core",
         dryRun: true,
         status: "live",
-        summary: `[DRY RUN] Would pull ${crm} contacts ${crm === "hubspot" ? "and companies " : ""}and batch-store into Personize.`,
-        metrics: { dry_run: true, crm },
+        summary: `[DRY RUN] Validated Personize-managed sync-in for ${provider} ${objects.join(", ")}${capNote} via ${mappingMode} mapping. ${detail}`,
+        metrics: { dry_run: true, provider, objects, max_records: maxRecords, mapping_mode: mappingMode, validations },
       };
     }
 
+    const perObject: Record<string, SyncRunResult> = {};
+    let totalRecords = 0;
+    let totalSuccess = 0;
+    let totalFailed = 0;
+    let anyFailedRun = false;
+
     try {
-      let contactResult: { scanned: number; stored: number };
-      let companyResult: { scanned: number; stored: number } = { scanned: 0, stored: 0 };
-
-      if (crm === "salesforce") {
-        contactResult = await syncSalesforceContacts();
-        // Salesforce companies sync is scaffolded — adapter needs sObject('Account') support and Website-extraction logic.
-      } else {
-        contactResult = await syncHubspotContacts();
-        companyResult = await syncHubspotCompanies();
+      for (const entityType of objects) {
+        const ds = await ensureDatasource(provider, entityType, { maxRecords, mappingMode });
+        const result = await runSync(ds.id, "in");
+        perObject[entityType] = result;
+        totalRecords += result.recordCount ?? 0;
+        totalSuccess += result.successCount ?? 0;
+        totalFailed += result.failedCount ?? 0;
+        if (runFailed(result.status)) anyFailedRun = true;
+        logger.info("crm.sync-core: object synced", { provider, entityType, ...result });
       }
-
-      const totalStored = contactResult.stored + companyResult.stored;
-      return {
-        ok: true,
-        runId: context.runId,
-        operation: "crm.sync-core",
-        dryRun: context.dryRun,
-        status: "live",
-        summary: `Synced ${contactResult.stored}/${contactResult.scanned} ${crm} contacts${
-          crm === "hubspot" ? ` and ${companyResult.stored}/${companyResult.scanned} companies` : ""
-        } into Personize.`,
-        metrics: {
-          crm,
-          contacts_scanned: contactResult.scanned,
-          contacts_stored: contactResult.stored,
-          companies_scanned: companyResult.scanned,
-          companies_stored: companyResult.stored,
-          records_scanned: contactResult.scanned + companyResult.scanned,
-          records_updated: totalStored,
-        },
-      };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error("crm.sync-core failed", { crm, error: message });
+      const message = explain(error);
+      logger.error("crm.sync-core failed", { provider, error: message });
       return {
         ok: false,
         runId: context.runId,
         operation: "crm.sync-core",
         dryRun: context.dryRun,
         status: "live",
-        summary: `Sync failed: ${message}`,
-        metrics: { crm, error: message },
+        summary: `Sync-in failed: ${message}`,
+        metrics: { provider, objects, error: message, per_object: perObject },
       };
     }
+
+    const dispatchedOnly = Object.values(perObject).every((r) => !r.eventId);
+    const summary = dispatchedOnly
+      ? `Dispatched Personize-managed sync-in for ${provider} ${objects.join(", ")}. Runs are async — check status in the Personize dashboard or via events.`
+      : `Synced ${totalSuccess}/${totalRecords} ${provider} records (${objects.join(", ")}) into Personize via managed sync-in.`;
+
+    return {
+      ok: !anyFailedRun,
+      runId: context.runId,
+      operation: "crm.sync-core",
+      dryRun: context.dryRun,
+      status: "live",
+      summary,
+      metrics: {
+        provider,
+        objects,
+        max_records: maxRecords,
+        mapping_mode: mappingMode,
+        records_scanned: totalRecords,
+        records_updated: totalSuccess,
+        records_failed: totalFailed,
+        per_object: perObject,
+      },
+    };
   },
 };

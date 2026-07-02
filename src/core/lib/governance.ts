@@ -12,18 +12,14 @@ import { logger } from "./logger.js";
 export async function loadGuideline(name: string): Promise<string> {
   const context = (client as any).context;
   try {
-    const result = await context?.retrieve?.({
-      contextNames: [name],
-      types: ["guideline"],
-    });
-    if (typeof result === "string") return result;
-    if (result?.data) {
-      const items = Array.isArray(result.data) ? result.data : [result.data];
-      const texts = items
-        .map((item: { value?: string; content?: string }) => item.value ?? item.content)
-        .filter((t: string | undefined): t is string => typeof t === "string");
-      return texts.join("\n\n");
-    }
+    // Fetch the guideline by name. context.list is a deterministic by-name/id
+    // lookup (GET /api/v1/context) — NOT context.retrieve, which is semantic
+    // doc-routing and requires a `message` query (it 400s without one).
+    const result = await context?.list?.({ type: "guideline" });
+    const items: Array<{ name?: string; slug?: string; value?: string; content?: string }> =
+      Array.isArray(result) ? result : (result?.data ?? []);
+    const match = items.find((item) => item.name === name || item.slug === name);
+    if (match) return match.value ?? match.content ?? "";
   } catch (error) {
     logger.warn(`Failed to load guideline '${name}'`, {
       error: error instanceof Error ? error.message : String(error),

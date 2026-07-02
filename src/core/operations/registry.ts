@@ -3,6 +3,8 @@ import { setupApply } from "./impl/setup-apply.js";
 import { setupVerify } from "./impl/setup-verify.js";
 import { setupDiff } from "./impl/setup-diff.js";
 import { crmSyncCore } from "./impl/crm-sync-core.js";
+import { crmSyncOut } from "./impl/crm-sync-out.js";
+import { crmSyncSchedule } from "./impl/crm-sync-schedule.js";
 import { syncPushProperties } from "./impl/sync-push-properties.js";
 import { syncPullEngagements } from "./impl/sync-pull-engagements.js";
 import { researchAccountDeepDive } from "./impl/research-account-deep-dive.js";
@@ -34,6 +36,8 @@ const ALL: OperationEntry[] = [
   setupDiff,
   // sync
   crmSyncCore,
+  crmSyncOut,
+  crmSyncSchedule,
   syncPushProperties,
   syncPullEngagements,
   syncNormalizeLifecycle,

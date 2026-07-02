@@ -6,7 +6,8 @@ import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
 import { workspace } from "../../lib/workspace.js";
-import type { OperationEntry } from "../types.js";
+import { crmWriteback } from "../../lib/crm-writeback.js";
+import type { CrmId, OperationEntry } from "../types.js";
 import { buildScaffold } from "../helpers.js";
 
 const DEFAULT_FILTER: Filter = {
@@ -45,6 +46,26 @@ async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
   })) as CompanyRecord[];
 }
 
+// Personize sync (icp_fit_score/icp_fit_reason) is handled by serverOutputs on the
+// ai() call — including the client-side fallback in private mode. This mirrors the
+// scores to the CRM record's personize_* fields so reps see them in HubSpot.
+async function mirrorScoreToCrm(
+  score: number,
+  reason: string,
+  crmRecordId?: string,
+  crm?: CrmId,
+): Promise<void> {
+  try {
+    await crmWriteback(
+      { crm, type: "company", crmRecordId },
+      { icp_fit_score: score, icp_fit_reason: reason },
+    );
+  } catch (error) {
+    logger.warn("Failed to mirror ICP score to CRM", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 export const scoreIcpFit: OperationEntry = {
   name: "score.icp-fit",
@@ -147,6 +168,10 @@ export const scoreIcpFit: OperationEntry = {
         });
 
         const { icp_fit_score, icp_fit_reason } = result.output;
+
+        // serverOutputs already synced the scores to Personize; mirror to the CRM too.
+        const crmRecordId = typeof company.crm_record_id === "string" ? company.crm_record_id : undefined;
+        await mirrorScoreToCrm(icp_fit_score, icp_fit_reason, crmRecordId, context.crm);
 
         await workspace.appendUpdate(
           { website_url: company.domain },

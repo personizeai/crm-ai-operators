@@ -30,7 +30,10 @@ const OPERATOR_MAP: Record<string, RetrieveFilterOperator> = {
   equals: "EQ",
   eq: "EQ",
   not_equals: "NEQ",
+  notequals: "NEQ", // compileFilter emits "notEquals" (camelCase) — lowercased here
   neq: "NEQ",
+  is_empty: "IS_EMPTY",
+  isempty: "IS_EMPTY", // compileFilter emits "isEmpty" (camelCase) — lowercased here
   contains: "CONTAINS",
   not_contains: "NOT_CONTAINS",
   starts_with: "STARTS_WITH",
@@ -44,9 +47,16 @@ const OPERATOR_MAP: Record<string, RetrieveFilterOperator> = {
   not_in: "NOT_IN",
 };
 
+/** Operators that test presence/emptiness — sending a `value` can be misinterpreted by the engine. */
+const VALUELESS_OPERATORS = new Set<RetrieveFilterOperator>(["EXISTS", "NOT_EXISTS", "IS_SET", "IS_NOT_SET", "IS_EMPTY"]);
+
 function toCondition(c: LegacyCondition): RetrieveFilterCondition {
   const key = typeof c.operator === "string" ? c.operator.toLowerCase() : "";
-  return { property: c.propertyName, operator: OPERATOR_MAP[key] ?? "EQ", value: c.value };
+  const operator = OPERATOR_MAP[key] ?? "EQ";
+  if (VALUELESS_OPERATORS.has(operator)) {
+    return { property: c.propertyName, operator };
+  }
+  return { property: c.propertyName, operator, value: c.value };
 }
 
 // -----------------------------------------------------------------------------

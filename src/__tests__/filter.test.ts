@@ -53,6 +53,30 @@ describe("compileFilter", () => {
     });
   });
 
+  test("in operator carries an array value", () => {
+    const result = compileFilter({
+      collection: "companies",
+      where: { domain: { in: ["a.com", "b.com"] } },
+    });
+    assert.deepEqual(result.conditions[0], {
+      propertyName: "domain",
+      operator: "in",
+      value: ["a.com", "b.com"],
+    });
+  });
+
+  test("not_in operator carries an array value", () => {
+    const result = compileFilter({
+      collection: "companies",
+      where: { lifecycle_stage: { not_in: ["Customer", "Disqualified"] } },
+    });
+    assert.deepEqual(result.conditions[0], {
+      propertyName: "lifecycle_stage",
+      operator: "not_in",
+      value: ["Customer", "Disqualified"],
+    });
+  });
+
   test("neq operator maps to notEquals", () => {
     const result = compileFilter({
       collection: "contacts",

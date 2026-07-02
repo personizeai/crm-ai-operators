@@ -7,7 +7,8 @@ import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
 import { workspace } from "../../lib/workspace.js";
-import type { OperationEntry } from "../types.js";
+import { crmWriteback } from "../../lib/crm-writeback.js";
+import type { CrmId, OperationEntry } from "../types.js";
 
 const DEFAULT_FILTER: Filter = {
   collection: "contacts",
@@ -65,8 +66,25 @@ async function getCompany(domain: string): Promise<CompanyRecord | null> {
   return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as CompanyRecord | null;
 }
 
+// ai_score/ai_score_reason are synced to Personize by serverOutputs on the ai()
+// call (incl. the private-mode client-side fallback). Here we write only the
+// computed timestamp, which isn't an AI output.
 async function writeTimestamp(email: string): Promise<void> {
   await setProperty({ type: "contact", email }, "ai_score_updated_at", new Date().toISOString());
+}
+
+// Mirror the scores to the CRM record's personize_* fields so reps see them in
+// HubSpot. Only the two writeback-flagged fields exist as CRM props (not the timestamp).
+async function mirrorScoreToCrm(
+  score: number,
+  reason: string,
+  crmRecordId?: string,
+  crm?: CrmId,
+): Promise<void> {
+  await crmWriteback(
+    { crm, type: "contact", crmRecordId },
+    { ai_score: score, ai_score_reason: reason },
+  );
 }
 
 export const scoreLeadQuality: OperationEntry = {
@@ -154,6 +172,10 @@ export const scoreLeadQuality: OperationEntry = {
 Apply hard-disqualifier gates from contact-qualification first — score = 0 if any gate fails.
 Apply thresholds from lead-scoring-policy.
 
+Return a JSON object with exactly these two keys (no others):
+- ai_score: integer 0-100
+- ai_score_reason: one-sentence explanation (20-500 chars) citing the strongest 1-2 factors
+
 Contact + company:
 ${recordContext}`,
           context: `# ICP Definition\n\n${guidelines["icp-definition"]}\n\n---\n\n# Contact Qualification\n\n${guidelines["contact-qualification"]}\n\n---\n\n# Lead Scoring Policy\n\n${guidelines["lead-scoring-policy"]}`,
@@ -169,6 +191,9 @@ ${recordContext}`,
         });
 
         await writeTimestamp(contact.email);
+        // serverOutputs already synced the scores to Personize; mirror to the CRM too.
+        const crmRecordId = typeof contact.crm_record_id === "string" ? contact.crm_record_id : undefined;
+        await mirrorScoreToCrm(result.output.ai_score, result.output.ai_score_reason, crmRecordId, context.crm);
 
         await workspace.appendUpdate(
           { email: contact.email },

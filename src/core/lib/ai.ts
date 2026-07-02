@@ -297,12 +297,13 @@ async function runSinglePrompt<T extends z.ZodTypeAny>(
 
   // When serverOutputs are defined, the server's <output> marker extraction is the
   // format contract — demanding raw JSON at the same time gives the model two
-  // contradictory output formats. Only add the JSON boilerplate on the parse path.
+  // contradictory output formats. Only add the JSON boilerplate (and the injected
+  // Zod schema shape) on the parse path.
   const fullPrompt = useServerOutputs
     ? options.context
       ? `${options.context}\n\n---\n\n${instructions}`
       : instructions
-    : buildPrompt(options.context, instructions);
+    : buildPrompt(options.context, instructions, options.outputs);
 
   const baseOpts: Record<string, unknown> = {
     prompt: fullPrompt,
@@ -433,10 +434,76 @@ async function runMultiStep<T extends z.ZodTypeAny>(
 // Helpers
 // -----------------------------------------------------------------------------
 
-function buildPrompt(context: string | undefined, instructions: string): string {
+function buildPrompt(context: string | undefined, instructions: string, outputs?: z.ZodTypeAny): string {
+  // Inject the EXACT output shape (keys + types) derived from the Zod schema.
+  // Without this, prompts that don't manually enumerate their keys let the model
+  // invent its own ({ score } instead of { ai_score }, recent_engagement as an
+  // array instead of a string, …) and validation fails. Deriving it from the
+  // schema fixes the whole class at the source and can't drift from the schema.
+  const shape = outputs ? describeZodShape(outputs) : undefined;
+  const directive = shape
+    ? `Return ONLY a JSON object with EXACTLY this shape — these keys and types, no others, no extra keys. No prose, no markdown fences.\n\nOutput shape:\n${shape}`
+    : "Return ONLY a JSON object matching the requested schema. No prose, no markdown fences.";
   return context
-    ? `${context}\n\n---\n\nReturn ONLY a JSON object matching the requested schema. No prose, no markdown fences.\n\n${instructions}`
-    : `Return ONLY a JSON object matching the requested schema. No prose, no markdown fences.\n\n${instructions}`;
+    ? `${context}\n\n---\n\n${directive}\n\n${instructions}`
+    : `${directive}\n\n${instructions}`;
+}
+
+/**
+ * Render a compact, human-readable description of a Zod schema's shape — keys,
+ * types, ranges, enum values — so the model knows exactly what JSON to emit.
+ * Handles the constructs the operations use; unknown nodes degrade to "value".
+ */
+function describeZodShape(schema: z.ZodTypeAny, depth = 0): string {
+  const def: any = (schema as any)?._def;
+  if (!def || depth > 6) return "value";
+  switch (def.typeName) {
+    case "ZodObject": {
+      const shape = typeof def.shape === "function" ? def.shape() : def.shape;
+      const entries = Object.entries(shape).map(
+        ([k, v]) => `${JSON.stringify(k)}: ${describeZodShape(v as z.ZodTypeAny, depth + 1)}`,
+      );
+      return `{ ${entries.join(", ")} }`;
+    }
+    case "ZodString": {
+      const checks = def.checks ?? [];
+      const min = checks.find((c: any) => c.kind === "min")?.value;
+      const max = checks.find((c: any) => c.kind === "max")?.value;
+      return min != null || max != null ? `string (${min ?? 0}-${max ?? "∞"} chars)` : "string";
+    }
+    case "ZodNumber": {
+      const checks = def.checks ?? [];
+      const isInt = checks.some((c: any) => c.kind === "int");
+      const min = checks.find((c: any) => c.kind === "min")?.value;
+      const max = checks.find((c: any) => c.kind === "max")?.value;
+      const range = min != null || max != null ? ` (${min ?? ""}–${max ?? ""})` : "";
+      return `${isInt ? "integer" : "number"}${range}`;
+    }
+    case "ZodBoolean":
+      return "boolean";
+    case "ZodEnum":
+      return `one of: ${(def.values as string[]).map((v) => JSON.stringify(v)).join(" | ")}`;
+    case "ZodNativeEnum":
+      return `one of: ${Object.values(def.values).map((v) => JSON.stringify(v)).join(" | ")}`;
+    case "ZodLiteral":
+      return JSON.stringify(def.value);
+    case "ZodArray":
+      return `array of ${describeZodShape(def.type, depth + 1)}`;
+    case "ZodOptional":
+      return `${describeZodShape(def.innerType, depth)} (optional)`;
+    case "ZodNullable":
+      return `${describeZodShape(def.innerType, depth)} or null`;
+    case "ZodDefault":
+      return describeZodShape(def.innerType, depth);
+    case "ZodEffects":
+      return describeZodShape(def.schema, depth);
+    case "ZodUnion":
+      return (def.options as z.ZodTypeAny[]).map((o) => describeZodShape(o, depth)).join(" | ");
+    case "ZodRecord":
+      return "object (string-keyed)";
+    default:
+      return "value";
+  }
 }
 
 function attachCommonFields(sdkOpts: Record<string, unknown>, options: AiPromptOptions<any>): void {
@@ -457,8 +524,74 @@ async function callAi(
   sdkOpts: Record<string, unknown>,
   verb: "prompt" | "subagent",
 ): Promise<any> {
-  if (typeof ai[verb] === "function") return ai[verb](sdkOpts);
-  throw new AiPromptError("sdk_unavailable", `client.ai.${verb} is not a function`);
+  if (typeof ai[verb] !== "function") {
+    throw new AiPromptError("sdk_unavailable", `client.ai.${verb} is not a function`);
+  }
+  const raw = await ai[verb](sdkOpts);
+  return resolvePromptResult(raw);
+}
+
+// -----------------------------------------------------------------------------
+// resolvePromptResult — bridge the async prompt API.
+//
+// /api/v1/prompt runs ASYNC by default: it returns a 202 ack
+//   { success, message, data: { eventId, status } }
+// and the result is delivered out-of-band. (The documented sync switch,
+// `stream:true`, returns an empty 200 body in this deployment, so we don't use
+// it.) We poll GET /api/v1/events/:eventId until the status is terminal, then
+// return `data.responsePayload` — shaped { success, text, outputs?, evaluation?,
+// metadata } — exactly what the downstream finalizers already expect.
+//
+// A synchronous response (no eventId) is passed straight through unchanged.
+// -----------------------------------------------------------------------------
+const TERMINAL_EVENT_STATUS = new Set(["completed", "partial_completed", "failed", "failed_stale"]);
+const POLL_INTERVAL_MS = 1500;
+const POLL_MAX_ATTEMPTS = 120; // ~180s ceiling
+
+async function resolvePromptResult(raw: any): Promise<any> {
+  const eventId = raw?.data?.eventId ?? raw?.eventId;
+  if (!eventId) return raw; // already synchronous — has text/outputs inline
+
+  const http = (client as any).client;
+  if (!http || typeof http.get !== "function") {
+    throw new AiPromptError(
+      "sdk_error",
+      `Async prompt ack (event ${eventId}) received but the SDK HTTP client is unavailable to poll for the result.`,
+    );
+  }
+
+  for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+    await sleep(POLL_INTERVAL_MS);
+    let body: any;
+    try {
+      const resp = await http.get(`/api/v1/events/${eventId}`);
+      body = resp?.data ?? resp;
+    } catch (error) {
+      throw new AiPromptError("sdk_error", `Polling prompt event ${eventId} failed: ${errMsg(error)}`);
+    }
+    const data = body?.data ?? body;
+    const status = data?.status as string | undefined;
+    if (!status || !TERMINAL_EVENT_STATUS.has(status)) continue;
+
+    if (status === "failed" || status === "failed_stale") {
+      const detail = data?.responsePayload?.error ?? data?.error ?? "no detail";
+      throw new AiPromptError("sdk_error", `Prompt event ${eventId} ${status}: ${detail}`);
+    }
+    const payload = data?.responsePayload;
+    if (!payload) {
+      throw new AiPromptError("sdk_error", `Prompt event ${eventId} reached '${status}' but carried no responsePayload.`);
+    }
+    return payload;
+  }
+
+  throw new AiPromptError(
+    "sdk_error",
+    `Prompt event ${eventId} did not complete within ${(POLL_INTERVAL_MS * POLL_MAX_ATTEMPTS) / 1000}s.`,
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function finalizeServerOutputs<T extends z.ZodTypeAny>(

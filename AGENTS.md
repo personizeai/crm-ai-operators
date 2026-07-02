@@ -18,7 +18,8 @@ Three layers of capability:
 
 1. **Memory layer** — every contact, company, deal, signal, conversation lives
    in Personize as a schema-enforced record. Define new properties via
-   `manifests/core/collections/*.json`.
+   `manifests/core/collections/*.json`. Records can also be linked by **graph
+   edges** — see "Declaring graph edges" below.
 2. **Governance layer** — guidelines, ICP, brand voice, compliance live as
    plain-English markdown in `manifests/core/guidelines/*.md`. Every operation
    reads these before acting.
@@ -110,10 +111,18 @@ When the user asks for new behavior that doesn't fit an existing operation:
 
 These rules apply to every operation in this repo, every agent that runs them.
 
-1. **CRM access goes through the adapter, not raw fetch.** Use
-   `src/adapters/{hubspot,salesforce}/adapter.ts` — never call HubSpot or
-   Salesforce APIs directly. The adapter wraps the Personize CRM Passthrough
-   so OAuth, rate limiting, and audit are handled for you.
+1. **CRM access goes through Personize, never raw fetch.** Two surfaces, by job:
+   - **Bulk record import / write-back** (contacts, companies, deals) →
+     Personize-managed sync via `src/adapters/personize-sync.ts`
+     (`crm.sync-core` for sync-in, `crm.sync-out` for write-back). Personize
+     owns the connection, pagination, field mapping, dedupe, and association
+     linking — our code only picks a provider + objects and triggers/polls.
+   - **Engagement side-channel** (emails, tasks, notes, lifecycle reads) →
+     `src/adapters/{hubspot,salesforce}/adapter.ts`, which wraps the Personize
+     CRM Passthrough (OAuth, rate limiting, audit handled for you).
+
+   Never call HubSpot or Salesforce APIs directly, and never paginate/field-map
+   bulk records by hand — that's the managed sync's job.
 
 2. **Default to `DRY_RUN=true`.** Live writes (Personize or CRM) require
    `DRY_RUN=false` in the environment. Show what you would do before doing it.
@@ -190,6 +199,9 @@ Operations are designed to batch.
 **When you complete an action:**
 Append to the entity's `workspace.updates` array AND store an atomic fact
 via `memory_save(email=..., content=...)`. The audit trail is not optional.
+Before that save, run the edge protocol (see "Building graph edges on every
+save") — fetch `relation_types`, validate, and attach the valid `relations` so
+the graph grows with the memory, not after it.
 
 **When to use the `tasks` collection vs acting directly:**
 Create a task when the work is queued, deferred, requires approval, or needs
@@ -197,6 +209,60 @@ cross-agent visibility before execution. Just act when the work is the
 immediate execution of the current operation. See `tasks-and-projects` guideline.
 
 ---
+
+## Building graph edges on every save (MANDATORY)
+
+Records are not enough — the memory is a **graph**, and edges only exist if
+**you declare them**. Nothing infers relationships from content for you. So on
+**every memory save where you know how the record relates to another entity**,
+you MUST build the edges. Follow this protocol — it is not optional:
+
+1. **FIND** the relationships. Look at the entities in scope (the record you're
+   saving plus every other entity named in its data/content) and list the
+   `from → relation → to` links that genuinely exist. A contact and their
+   company → `works_at`. A meeting and its attendees → `participated_in`. A
+   contact and their manager → `reports_to`.
+2. **FETCH** the allowed relation types. Call the `relation_types` tool (MCP) or
+   `crm-agent relations list` (CLI). This is the org's registry — the ONLY
+   relation types and from/to entity pairs that are legal. Do not invent names.
+3. **FILTER** your candidate edges down to legal ones. Call `relations_validate`
+   (MCP) or `crm-agent relations validate` with your proposed edges; keep the
+   `valid` set, discard `dropped`. Match each edge's `relationType` and its
+   from/to entity types to a registry entry (`[]` in from/to means "any type").
+4. **SAVE** with the polished edges attached — pass the validated `relations` in
+   the save payload (`memory_save` / `memory.upsert`), or in code via the
+   `relations` field on the `WriteTarget` / `SaveRecordInput` you hand `persist.*`.
+
+In code, that fourth step looks like:
+
+```ts
+await setProperties(
+  {
+    type: "contact",
+    email: contact.email,
+    relations: [
+      { relationType: REL.WORKS_AT, toIdentity: { kind: "domain", value: company.domain }, toEntityType: "company" },
+    ],
+  },
+  { account_score_lift: company.icp_fit_score },
+);
+```
+
+Guarantees and gotchas (`src/core/lib/graph.ts` + `persist.ts`):
+
+- **The registry is the gate — twice.** You filter against it in step 3, and the
+  save path re-validates every edge before sending (drops unknown/inactive types
+  and disallowed from/to pairs, logged). So a bad edge can never corrupt a write —
+  but if you skip steps 1–3 you simply get no graph.
+- **Routing is automatic.** A save carrying ≥1 valid edge routes through the v1.1
+  pipeline (the only backend that persists edges); a save with none stays on the
+  plain path unchanged. Targets that don't exist yet become stubs, promoted when
+  that entity is later upserted.
+- **`REL` constants** in `graph.ts` hold the type names this repo uses; they're
+  validated live, so adjust them if your org renames a type.
+- **Async landing.** Edges arrive shortly after the save returns — don't
+  read-after-write. An empty Relationships tab is usually the `includeStubs`
+  display filter, not a missing edge.
 
 ## Anti-patterns
 

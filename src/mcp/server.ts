@@ -8,6 +8,7 @@ import { getOrchestratorConfig, setOrchestratorStatus } from "../core/engine/orc
 import { retrieveRecords } from "../core/lib/recall.js";
 import { setProperties } from "../core/lib/persist.js";
 import { isDryRun } from "../core/lib/dry-run.js";
+import { getRelationCatalog, checkRelations, type DeclaredRelation } from "../core/lib/graph.js";
 
 type McpProfile = "planner" | "operator" | "admin" | "auditor";
 const PROFILE = (process.env.MCP_PROFILE as McpProfile) || "planner";
@@ -269,6 +270,50 @@ server.tool(
       limit: Math.min(limit ?? 20, 100),
     });
     return { content: [{ type: "text", text: JSON.stringify(records, null, 2) }] };
+  },
+);
+
+// --- Graph relations: the two tools the assistant uses to build correct edges ---
+// The mandatory save protocol (AGENTS.md → "Building graph edges on every save"):
+// before declaring edges on a memory save, call `relation_types` to see what's
+// allowed, then `relations_validate` to polish the payload down to valid edges.
+
+server.tool(
+  "relation_types",
+  "List the org's allowed graph relation types (the relation registry). Call this BEFORE declaring any edges on a memory save — each entry gives the relationType and its allowed from/to entity types ([] means any).",
+  {},
+  async () => ({
+    content: [{ type: "text", text: JSON.stringify(await getRelationCatalog(), null, 2) }],
+  }),
+);
+
+const DeclaredRelationSchema = z.object({
+  relationType: z.string().describe("Relation type name from relation_types, e.g. works_at"),
+  toRecordId: z.string().optional().describe("Target by record id (use this OR toIdentity)"),
+  toIdentity: z
+    .object({
+      kind: z.enum(["email", "websiteUrl", "domain", "phoneNumber", "name"]),
+      value: z.string(),
+    })
+    .optional()
+    .describe("Target by strong identity; resolved or stubbed at write time"),
+  toEntityType: z.string().optional().describe("Target entity type, e.g. company (required with toIdentity)"),
+  confidence: z.number().min(0).max(1).optional(),
+});
+
+server.tool(
+  "relations_validate",
+  "Validate proposed graph edges against the org registry WITHOUT saving. Returns { valid, dropped } so you can polish a declared-edge payload before saving. `dropped` explains why each edge failed (unknown-type | inactive | from-type-not-allowed | to-type-not-allowed).",
+  {
+    fromEntityType: z.string().describe("Entity type of the record you're saving, e.g. contact"),
+    relations: z.array(DeclaredRelationSchema).describe("The edges you intend to declare on the save"),
+  },
+  async ({ fromEntityType, relations }: { fromEntityType: string; relations: z.infer<typeof DeclaredRelationSchema>[] }) => {
+    // NOTE (pre-existing, graph owner): the local schema allows kind:"domain" but the
+    // SDK's DeclaredRelation.kind does not. Cast to unblock compilation without changing
+    // runtime behavior — resolve by aligning the schema to the SDK (or updating the SDK).
+    const { valid, dropped } = await checkRelations(fromEntityType, relations as DeclaredRelation[]);
+    return { content: [{ type: "text", text: JSON.stringify({ valid, dropped }, null, 2) }] };
   },
 );
 

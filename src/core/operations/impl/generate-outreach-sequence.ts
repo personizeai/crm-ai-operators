@@ -182,6 +182,8 @@ export const generateOutreachSequence: OperationEntry = {
 - body_html (using only <p>, <b>/<strong>, <i>/<em>, <a href>, <br> — see outreach-playbook)
 - angle (one sentence describing the hook for that email)
 
+Return a JSON object with exactly these three keys (no others) — email1, email2, email3 — where each value is an object { subject, body_html, angle }. email1 = cold open, email2 = new angle, email3 = binary CTA.
+
 Contact + company context:
 ${recordContext}` +
             verificationInstruction(

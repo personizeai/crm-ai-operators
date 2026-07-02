@@ -32,7 +32,7 @@ mcp__personize__personize_cookbook({
 ```
 
 **Response metadata:**
-- Persisted file: `C:\Users\Admin\.claude\projects\c--Users-Admin-Documents-GitHub-Playground\e71d4500-aea6-44c9-9615-63a64b9189f6\tool-results\mcp-personize-personize_cookbook-1777920942259.txt`
+- Persisted file: `<reporter-machine>/.claude/projects/<project>/tool-results/mcp-personize-personize_cookbook-1777920942259.txt`
 - Bytes on disk: **88,936**
 - Parsed text length (after JSON envelope strip): **85,940 chars**
 - Approx tokens (chars / 4): **~21,485**
@@ -41,7 +41,7 @@ mcp__personize__personize_cookbook({
 **Routing:**
 - Selected skill: `personize-reference`
 - Embedding similarity: **0.631**
-- Variable ID: `d25ca19f-17ca-42cb-a192-b1377959edc7`
+- Variable ID: `<redacted>`
 
 **Content audit (regex over the parsed text):**
 
@@ -72,7 +72,7 @@ mcp__personize__personize_cookbook({
 ```
 
 **Response metadata:**
-- Persisted file: `C:\Users\Admin\.claude\projects\c--Users-Admin-Documents-GitHub-Playground\e71d4500-aea6-44c9-9615-63a64b9189f6\tool-results\mcp-personize-personize_cookbook-1777922094064.txt`
+- Persisted file: `<reporter-machine>/.claude/projects/<project>/tool-results/mcp-personize-personize_cookbook-1777922094064.txt`
 - Bytes on disk: **87,745**
 - Parsed text length: **84,767 chars**
 - Approx tokens: **~21,192**
@@ -81,7 +81,7 @@ mcp__personize__personize_cookbook({
 **Routing:**
 - Selected skill: `personize-agent-core` (NOT `personize-reference`)
 - Embedding similarity: **0.484** (weaker than Call 1)
-- Variable ID: `fccbab3a-5d3f-42ba-b729-56632cbaeb68`
+- Variable ID: `<redacted>`
 
 **Content audit:** Same regex probe as Call 1 → identical result. `PromptOptions` not present. Six `instruction` substring matches were all about `guidelines.smartUpdate`. The actual answer was again missing.
 
@@ -196,10 +196,10 @@ This adds latency and tool-call overhead even when the answer is nowhere in the 
 Both raw responses are persisted on the reporter's machine. Format per the harness: JSON array `[{type: string, text: string}]`. The Personize team or another agent can read them at:
 
 1. **Call 1 (focus: reference, query about `instructions` array):**
-   `C:\Users\Admin\.claude\projects\c--Users-Admin-Documents-GitHub-Playground\e71d4500-aea6-44c9-9615-63a64b9189f6\tool-results\mcp-personize-personize_cookbook-1777920942259.txt`
+   `<reporter-machine>/.claude/projects/<project>/tool-results/mcp-personize-personize_cookbook-1777920942259.txt`
 
 2. **Call 2 (focus: enabler, query for full TS interface):**
-   `C:\Users\Admin\.claude\projects\c--Users-Admin-Documents-GitHub-Playground\e71d4500-aea6-44c9-9615-63a64b9189f6\tool-results\mcp-personize-personize_cookbook-1777922094064.txt`
+   `<reporter-machine>/.claude/projects/<project>/tool-results/mcp-personize-personize_cookbook-1777922094064.txt`
 
 To verify my audit, parse `[0].text` and grep for `PromptOptions`, `Array<string`, `maxSteps`, `outputs?: PromptOutputDefinition`. None will appear.
 
