@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ensurePersonizeKey } from "../config.js";
+import { ensurePersonizeKey, hasCapability, PERSONIZE_MODE } from "../config.js";
 import { isDryRun } from "../lib/dry-run.js";
 import { logger, withRunContext } from "../lib/logger.js";
 import { withUsageSink, getUsageTotals } from "../lib/usage.js";
@@ -21,6 +21,19 @@ export async function runOperation(
   // Operations always need Personize. Fail fast with a friendly error rather
   // than letting an SDK call deep inside the operation produce a confusing one.
   ensurePersonizeKey();
+
+  // Capability gate: refuse operations whose backend requirements the active
+  // deployment (hosted vs Personize Private) can't meet, with a clear message
+  // rather than a confusing failure deep inside an SDK/gateway call.
+  if (operation.requires?.length) {
+    const missing = operation.requires.filter((c) => !hasCapability(c));
+    if (missing.length > 0) {
+      throw new Error(
+        `Operation ${name} requires capabilities not available on the ${PERSONIZE_MODE} backend: ` +
+          `${missing.join(", ")}. See docs/PERSONIZE-PRIVATE.md.`,
+      );
+    }
+  }
 
   const runId = randomUUID();
   const dryRun = await isDryRun();

@@ -7,7 +7,8 @@ import { createTask } from "../lib/tasks.js";
 import { isDryRun } from "../lib/dry-run.js";
 import { ai, type Tier } from "../lib/ai.js";
 import { loadGuideline } from "../lib/governance.js";
-import { OPERATIONS } from "../operations/registry.js";
+import { hasCapability, PERSONIZE_MODE } from "../config.js";
+import { OPERATIONS, isOperationAvailable } from "../operations/registry.js";
 import { runOperation } from "../runtime/operation-runner.js";
 import {
   getOrchestratorConfig,
@@ -208,6 +209,12 @@ const SubagentResultSchema = z.object({
 // autonomous agent (tools on) against the record. Replaces the former task stub.
 // ---------------------------------------------------------------------------
 async function routeToSubagent(route: DispatchRoute, email: string, dryRun: boolean): Promise<number> {
+  if (!hasCapability("subagent")) {
+    throw new Error(
+      `Subagent route ${route.name} requires the 'subagent' capability, not available on the ` +
+        `${PERSONIZE_MODE} backend. See docs/PERSONIZE-PRIVATE.md.`,
+    );
+  }
   if (dryRun) {
     logger.info("[DRY RUN] Would run subagent", { route: route.name, email });
     return 0;
@@ -296,6 +303,7 @@ async function routeToTriage(
 ): Promise<number> {
   const menu = Object.values(OPERATIONS)
     .filter((op) => op.mode === "operation" && op.status === "live")
+    .filter((op) => isOperationAvailable(op, hasCapability)) // hide ops the backend can't run
     .map((op) => ({ name: op.name, description: op.description, cost: op.cost ?? "medium" }));
 
   if (dryRun) {

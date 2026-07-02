@@ -79,6 +79,7 @@ export const researchContactBackground: OperationEntry = {
   cost: "medium",
   run_mode: "on-trigger",
   guidelines_required: ["account-research"],
+  requires: ["subagent"], // autonomous web research — hosted only until gateway subagent lands
   skip_if: { property: "job_title", updated_within: "60d" },
   run: async (input, context) => {
     const filter = parseFilterInput(input) ?? DEFAULT_FILTER;

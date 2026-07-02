@@ -114,6 +114,7 @@ export const researchAccountDeepDive: OperationEntry = {
   cost: "high",
   run_mode: "on-trigger",
   guidelines_required: ["account-research"],
+  requires: ["subagent"], // autonomous web research — hosted only until gateway subagent lands
   skip_if: { property: "context", updated_within: "30d" },
   run: async (input, context) => {
     const filter = parseFilterInput(input) ?? DEFAULT_FILTER;

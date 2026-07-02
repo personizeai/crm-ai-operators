@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { client } from "../config.js";
+import { client, hasCapability } from "../config.js";
 import { logger } from "./logger.js";
 import { reportUsage } from "./usage.js";
+import { setProperty } from "./persist.js";
 
 // -----------------------------------------------------------------------------
 // Types — mirror the relevant subset of @personize/sdk PromptOptions
@@ -251,7 +252,33 @@ async function runAi<T extends z.ZodTypeAny>(
       tokens: result.usage.totalTokens ?? result.usage.tokens,
     });
   }
+
+  // serverOutputs client-side fallback: when the backend can't sync outputs to
+  // properties server-side (e.g. Personize Private), write them here from the
+  // validated output using the same collectionId/propertyId mapping. This makes
+  // serverOutputs a declarative contract that runs server- OR client-side.
+  if (options.serverOutputs?.length && !hasCapability("serverOutputs") && options.memorize) {
+    await applyServerOutputsClientSide(options, result.output);
+  }
   return result;
+}
+
+async function applyServerOutputsClientSide<T extends z.ZodTypeAny>(
+  options: AiPromptOptions<T>,
+  output: Record<string, unknown>,
+): Promise<void> {
+  const m = options.memorize!;
+  const type = (m.type ?? "Contact").toLowerCase();
+  for (const so of options.serverOutputs ?? []) {
+    if (!so.collectionId || !so.propertyId) continue; // unstructured output — nothing to write
+    const value = output?.[so.name];
+    if (value === undefined || value === null) continue;
+    await setProperty(
+      { type, email: m.email, websiteUrl: m.websiteUrl, recordId: m.recordId, collection: so.collectionId },
+      so.propertyId,
+      value,
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -264,7 +291,9 @@ async function runSinglePrompt<T extends z.ZodTypeAny>(
   verb: "prompt" | "subagent",
 ): Promise<AiResult<z.infer<T>>> {
   const instructions = options.instructions as string;
-  const useServerOutputs = Boolean(options.serverOutputs?.length);
+  // Only use the server's <output> marker extraction when the backend supports it.
+  // Otherwise fall through to the JSON path and write properties client-side (see runAi).
+  const useServerOutputs = Boolean(options.serverOutputs?.length) && hasCapability("serverOutputs");
 
   // When serverOutputs are defined, the server's <output> marker extraction is the
   // format contract — demanding raw JSON at the same time gives the model two
@@ -359,6 +388,13 @@ async function runMultiStep<T extends z.ZodTypeAny>(
       "schema_validation",
       "Multi-step instructions require `serverOutputs: [{ name, required? }, ...]`. " +
         "Server-side <output> extraction is the only reliable way to capture multi-step results.",
+    );
+  }
+  if (!hasCapability("serverOutputs")) {
+    throw new AiPromptError(
+      "sdk_unavailable",
+      "Multi-step instructions require server-side <output> extraction, which the active " +
+        "backend does not support (e.g. Personize Private). Use a single-prompt instruction instead.",
     );
   }
 
