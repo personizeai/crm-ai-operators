@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -157,7 +157,7 @@ export const generateProposal: OperationEntry = {
       recent_conversations: conversations.slice(0, 8),
     }, null, 2);
 
-    const result = await aiPrompt({
+    const result = await ai({
       instructions: `Draft a professional proposal for this deal. Use only facts from the provided context — do not invent case studies, statistics, or testimonials. This is always a DRAFT for human review.
 
 Required output:

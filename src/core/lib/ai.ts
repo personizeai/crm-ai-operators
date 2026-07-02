@@ -54,6 +54,14 @@ export type Tier = "basic" | "pro" | "ultra";
 
 export interface AiPromptOptions<T extends z.ZodTypeAny> {
   /**
+   * When true, runs as an autonomous subagent (agent tools on, governed memory off).
+   * Use for research.*, act.*, and any "plan → use tools → act" task.
+   * Defaults to false: governed prompt (governed memory on, no tool use) for
+   * score.*, analyze.*, report.*, and generate.* structured extraction.
+   */
+  autonomous?: boolean;
+
+  /**
    * Instructions for the model.
    * - string → single-prompt mode (legacy). The wrapper concatenates context and asks for JSON back.
    * - array  → multi-step mode. Each step is one mental act. Last step emits <output> markers.
@@ -180,24 +188,36 @@ export class AiPromptError extends Error {
 }
 
 // -----------------------------------------------------------------------------
-// aiPrompt / aiSubagent — the two public verbs.
+// ai() — the single public verb.
 //
-//   aiPrompt   → deterministic structured generation (governed memory on).
-//                Use for score.*, analyze.*, report.*, and generate.* extraction.
-//   aiSubagent → autonomous, tool-using run (agent tools on, governed memory off).
-//                Use for research.*, act.*, and any "plan → use tools → act" task.
+// Both modes hit the same /api/v1/prompt endpoint via the Personize SDK.
+// The `autonomous` flag (on AiPromptOptions) picks which SDK verb to invoke:
 //
-// Both hit the same /api/v1/prompt endpoint and share this code path; they differ
-// only in which SDK verb is invoked (client.ai.prompt vs client.ai.subagent), which
-// flips the autonomy defaults server-side. Requires @personize/sdk >= 0.14.0.
+//   autonomous: false (default) → client.ai.prompt
+//     Governed memory on. Use for score.*, analyze.*, report.*, generate.*
+//     Deterministic structured generation from memory + context.
+//
+//   autonomous: true → client.ai.subagent
+//     Agent tools on, governed memory off. Use for research.*, act.*,
+//     and any "plan → use tools → act" task.
+//
+// Requires @personize/sdk >= 0.14.0.
 // -----------------------------------------------------------------------------
 
+export async function ai<T extends z.ZodTypeAny>(
+  options: AiPromptOptions<T>,
+): Promise<AiResult<z.infer<T>>> {
+  return runAi(options, options.autonomous ? "subagent" : "prompt");
+}
+
+/** @deprecated Use ai() — autonomous defaults to false (governed prompt). */
 export async function aiPrompt<T extends z.ZodTypeAny>(
   options: AiPromptOptions<T>,
 ): Promise<AiResult<z.infer<T>>> {
   return runAi(options, "prompt");
 }
 
+/** @deprecated Use ai({ autonomous: true }) */
 export async function aiSubagent<T extends z.ZodTypeAny>(
   options: AiPromptOptions<T>,
 ): Promise<AiResult<z.infer<T>>> {

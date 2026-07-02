@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { setProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
 import { workspace } from "../../lib/workspace.js";
@@ -177,7 +177,7 @@ export const analyzeDeduplication: OperationEntry = {
       null, 2,
     );
 
-    const result = await aiPrompt({
+    const result = await ai({
       instructions: `Review these candidate duplicate pairs and confirm which are genuine duplicates. For confirmed duplicates, recommend which record to keep as primary (prefer the one with more complete data).
 
 Candidate pairs:

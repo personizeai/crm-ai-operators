@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
 import { setProperty } from "../../lib/persist.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -150,7 +150,7 @@ export const scoreLeadQuality: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Score this contact 0-100 for lead quality using these weights:
 - Persona match (title/function vs target buyer): 35%
 - Seniority (decision-maker vs influencer vs IC): 20%

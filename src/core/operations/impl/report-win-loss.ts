@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { retrieveRecords } from "../../lib/recall.js";
 import { setProperties } from "../../lib/persist.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -156,7 +156,7 @@ export const reportWinLoss: OperationEntry = {
       totals: { won: won.length, lost: lost.length },
     }, null, 2);
 
-    const result = await aiPrompt({
+    const result = await ai({
       instructions: `Analyze the patterns across won and lost accounts. Focus on statistically meaningful differences — what distinguishes won accounts from lost ones in terms of firmographics, champion profiles, and signals. Do not invent patterns not supported by the data.
 
 Won vs Lost account data:

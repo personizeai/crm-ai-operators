@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
 import { setProperties } from "../../lib/persist.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -154,7 +154,7 @@ export const generateMutualActionPlan: OperationEntry = {
       recent_conversations: conversations.slice(0, 8),
     }, null, 2);
 
-    const result = await aiPrompt({
+    const result = await ai({
       instructions: `Draft a Mutual Action Plan for this deal. Focus on concrete, time-bound milestones with clear owner assignments (buyer side, seller side, or both). Base milestones on what's been discussed in conversations and what the deal stage requires.
 
 Context:

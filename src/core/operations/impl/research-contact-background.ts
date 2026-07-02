@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { retrieveRecords } from "../../lib/recall.js";
 import { setProperty } from "../../lib/persist.js";
-import { aiSubagent, type Tier } from "../../lib/ai.js";
+import { ai, type Tier } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -128,7 +128,7 @@ export const researchContactBackground: OperationEntry = {
         email;
 
       try {
-        const result = await aiSubagent({
+        const result = await ai({ autonomous: true,
           instructions: `Research ${displayName} (${email}), who works at ${contact.company_domain ?? "unknown company"} as ${contact.job_title ?? "unknown role"}.
 Find their current verified job title, seniority level, job function, and communication style from any public posts or talks.
 Look for pain points they have shared publicly in articles, LinkedIn posts, or conference talks.

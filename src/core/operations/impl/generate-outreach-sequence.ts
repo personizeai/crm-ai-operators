@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { addBusinessDays, isoDate } from "../../lib/dates.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
@@ -173,7 +173,7 @@ export const generateOutreachSequence: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Draft a 3-email outreach sequence for this contact. Follow the outreach-playbook example sequences exactly: Email 1 = cold open with specific observation; Email 2 = new angle (different from Email 1); Email 3 = brief binary CTA. Use brand-voice tone rules and the HTML structure from the outreach-playbook. Each email needs:
 - subject (5-120 chars, no ALL CAPS, no excessive punctuation)
 - body_html (using only <p>, <b>/<strong>, <i>/<em>, <a href>, <br> — see outreach-playbook)

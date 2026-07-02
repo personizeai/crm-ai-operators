@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { retrieveRecords } from "../../lib/recall.js";
 import { setProperties, setProperty, appendToProperty } from "../../lib/persist.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -144,7 +144,7 @@ export const syncPullEngagements: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Extract structured insights from this ${engagement.type ?? "conversation"} engagement.
 
 Subject: ${engagement.subject ?? "(none)"}

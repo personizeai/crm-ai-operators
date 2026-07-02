@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { retrieveRecords } from "../../lib/recall.js";
 import { setProperties } from "../../lib/persist.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -145,7 +145,7 @@ export const reportPipelineHealth: OperationEntry = {
       };
     }
 
-    const result = await aiPrompt({
+    const result = await ai({
       instructions: `Generate a pipeline health narrative for this week. Be specific — cite stage counts, score distributions, and signal patterns from the data. Flag real risks and real momentum. Do not invent data.
 
 Pipeline data:

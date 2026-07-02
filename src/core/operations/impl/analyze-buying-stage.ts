@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { setProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -143,7 +143,7 @@ export const analyzeBuyingStage: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Infer the buying stage for this contact from their recent conversations and signals. Choose the single most accurate stage. Base your answer only on evidence in the data — do not guess.
 
 Contact + engagement context:

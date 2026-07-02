@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { retrieveRecords } from "../../lib/recall.js";
 import { setProperty, setProperties } from "../../lib/persist.js";
-import { aiSubagent, type Tier } from "../../lib/ai.js";
+import { ai, type Tier } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -158,7 +158,7 @@ export const researchAccountDeepDive: OperationEntry = {
       }
 
       try {
-        const result = await aiSubagent({
+        const result = await ai({ autonomous: true,
           instructions: `Research the company at domain "${domain}" (${company.company_name ?? "unknown name"}).
 Gather: firmographics (size, industry, business model), recent funding or news (last 90 days),
 leadership moves, tech stack signals from job postings, key stakeholders in VP Sales, CTO, Head of Revenue, CRO functions.

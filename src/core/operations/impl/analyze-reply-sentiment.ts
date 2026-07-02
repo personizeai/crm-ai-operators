@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { setProperty, setProperties, appendToProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -159,7 +159,7 @@ export const analyzeReplySentiment: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Classify this email reply into one of the 9 reply classes. Use the reply-handling and signal-definitions guidelines to calibrate your classification.
 
 Email subject: ${reply.subject ?? "(none)"}
