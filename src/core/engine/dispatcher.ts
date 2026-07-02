@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger.js";
+import { runWithConcurrency } from "../lib/concurrency.js";
 import { retrieveRecords } from "../lib/recall.js";
 import { compileFilter, type CompiledFilter } from "../lib/filter.js";
 import { createTask } from "../lib/tasks.js";
@@ -75,8 +76,10 @@ interface DispatchRoute {
   target_name: string;
   instructions_name?: string;
   max_per_cycle?: number;
-  /** When true, records within this route are dispatched concurrently (Promise.allSettled). Ignored in batch mode. */
+  /** When true, records within this route are dispatched concurrently. Ignored in batch mode. */
   parallel?: boolean;
+  /** Max simultaneous operations in parallel mode. Default 8. Caps SDK/API pressure per route. */
+  concurrency?: number;
   /**
    * How records are handed to the operation.
    * - "per_record" (default): one runOperation call per record, input = { email }.
@@ -138,8 +141,13 @@ async function routeToOperation(
     logger.info("[DRY RUN] Would run operation", { operation: targetName, email });
     return;
   }
-  // runOperation(name, input, options) — handles runId + dryRun internally
-  await runOperation(targetName, { email }, { tierOverride, modelOverride });
+  // runOperation(name, input, options) — handles runId + dryRun internally.
+  // Operations report internal failures by RETURNING ok:false (not throwing) —
+  // treat that as failure too, so the email is not claimed and errors are counted.
+  const result = await runOperation(targetName, { email }, { tierOverride, modelOverride });
+  if (!result.ok) {
+    throw new Error(`Operation ${targetName} reported failure: ${result.summary ?? "no summary"}`);
+  }
 }
 
 async function routeToTask(
@@ -314,11 +322,17 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
           // Pass the full record list as input.records — operation uses this directly
           // and skips its own recall. The operation still validates and filters the list
           // (e.g. empty transcripts, missing identifiers) before doing its work.
-          await runOperation(
+          const batchOpResult = await runOperation(
             route.target_name,
             { records: eligible },
             { tierOverride: route.tier_override, modelOverride: route.model_override },
           );
+          // ok:false without throwing is still a failure — atomic semantics: claim nothing.
+          if (!batchOpResult.ok) {
+            throw new Error(
+              `Operation ${route.target_name} reported failure: ${batchOpResult.summary ?? "no summary"}`,
+            );
+          }
           // Claim all emails from this batch after successful operation
           for (const email of emailsInBatch) { claimedEmails.add(email); }
           result.leads_claimed += emailsInBatch.length;
@@ -339,12 +353,13 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
 
     if (route.parallel) {
       // -----------------------------------------------------------------------
-      // PARALLEL pattern: all eligible records for this route run concurrently.
+      // PARALLEL pattern: eligible records for this route run concurrently,
+      // bounded by route.concurrency (default 8) so one route config cannot
+      // rate-limit the whole org. Wall-clock ≈ ceil(n / concurrency) batches.
       // Best for independent per-record operations (research, enrichment, scoring).
-      // Wall-clock = slowest record, not sum of all records.
       //
       // Emails are pre-filtered before dispatch to avoid races on claimedEmails.
-      // Promise.allSettled ensures one failure does not cancel the rest.
+      // One failure does not cancel the rest (allSettled semantics).
       // -----------------------------------------------------------------------
       const eligible = records
         .filter((r) => {
@@ -353,8 +368,9 @@ export async function dispatch(event: IncomingEvent): Promise<DispatchResult> {
         })
         .slice(0, maxPerCycle);
 
-      const outcomes = await Promise.allSettled(
-        eligible.map((record) => dispatchOne(route, extractEmail(record)!, dryRun)),
+      const concurrency = Number(route.concurrency ?? 8);
+      const outcomes = await runWithConcurrency(eligible, concurrency, (record) =>
+        dispatchOne(route, extractEmail(record)!, dryRun),
       );
 
       for (const outcome of outcomes) {

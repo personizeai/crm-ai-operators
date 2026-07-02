@@ -82,7 +82,10 @@ export interface AiPromptOptions<T extends z.ZodTypeAny> {
   /** Sampling temperature. Default 0.3. Single-prompt mode only — multi-step uses server defaults per tier. */
   temperature?: number;
 
-  /** Max output tokens. Default 1000. Single-prompt mode only. */
+  /**
+   * Max output tokens. Single-prompt mode only.
+   * Default: 2000 for governed prompts; NO default when autonomous (tier default governs).
+   */
   maxTokens?: number;
 
   /** Model override (BYOK). Without BYOK, use `tier` instead. */
@@ -250,37 +253,86 @@ async function runSinglePrompt<T extends z.ZodTypeAny>(
   ai: any,
   verb: "prompt" | "subagent",
 ): Promise<AiResult<z.infer<T>>> {
-  const fullPrompt = buildPrompt(options.context, options.instructions as string);
+  const instructions = options.instructions as string;
+  const useServerOutputs = Boolean(options.serverOutputs?.length);
 
-  const sdkOpts: Record<string, unknown> = {
+  // When serverOutputs are defined, the server's <output> marker extraction is the
+  // format contract — demanding raw JSON at the same time gives the model two
+  // contradictory output formats. Only add the JSON boilerplate on the parse path.
+  const fullPrompt = useServerOutputs
+    ? options.context
+      ? `${options.context}\n\n---\n\n${instructions}`
+      : instructions
+    : buildPrompt(options.context, instructions);
+
+  const baseOpts: Record<string, unknown> = {
     prompt: fullPrompt,
     temperature: options.temperature ?? 0.3,
-    maxTokens: options.maxTokens ?? 1000,
   };
-  attachCommonFields(sdkOpts, options);
+  // Governed prompts get a bounded default. Autonomous runs send no default —
+  // research output sizes vary too much for a fixed client cap, and a silent
+  // truncation surfaces as a confusing invalid_json error. Explicit values win.
+  const maxTokens = options.maxTokens ?? (options.autonomous ? undefined : 2000);
+  if (maxTokens !== undefined) baseOpts.maxTokens = maxTokens;
+  attachCommonFields(baseOpts, options);
 
-  let response: any;
-  try {
-    response = await callAi(ai, sdkOpts, verb);
-  } catch (error) {
-    logger.error("AI prompt failed", { error: errMsg(error) });
-    throw new AiPromptError("sdk_error", errMsg(error));
+  // Self-repair loop: on a validation failure in the JSON parse path, retry ONCE
+  // with the validation error appended so the model can correct its format.
+  const MAX_ATTEMPTS = 2;
+  let lastError: AiPromptError | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const sdkOpts =
+      attempt === 1
+        ? baseOpts
+        : {
+            ...baseOpts,
+            prompt:
+              `${fullPrompt}\n\n---\n\nYour previous response was rejected: ${lastError!.message}\n` +
+              `Respond again following the required format exactly.`,
+          };
+
+    let response: any;
+    try {
+      response = await callAi(ai, sdkOpts, verb);
+    } catch (error) {
+      logger.error("AI prompt failed", { error: errMsg(error) });
+      throw new AiPromptError("sdk_error", errMsg(error));
+    }
+
+    if (response?.aborted) {
+      throw new AiPromptError("aborted_by_model", `Model aborted: ${response.abortReason ?? "unknown"}`, {
+        abortReason: response.abortReason,
+      });
+    }
+
+    // If serverOutputs are defined, the SDK extracts via XML markers — use those.
+    // Server-side extraction failures are not retried here (re-asking rarely fixes them).
+    if (useServerOutputs && response?.outputs) {
+      return finalizeServerOutputs(options, response);
+    }
+
+    // Else: JSON parse path (retryable once on validation failure)
+    const raw = typeof response === "string" ? response : extractText(response);
+    try {
+      return finalizeJsonOutput(options, raw, response);
+    } catch (error) {
+      const retryable =
+        error instanceof AiPromptError &&
+        (error.kind === "invalid_json" || error.kind === "schema_validation");
+      if (retryable && attempt < MAX_ATTEMPTS) {
+        lastError = error as AiPromptError;
+        logger.warn("AI response failed validation — retrying once with the error appended", {
+          kind: lastError.kind,
+        });
+        continue;
+      }
+      throw error;
+    }
   }
 
-  if (response?.aborted) {
-    throw new AiPromptError("aborted_by_model", `Model aborted: ${response.abortReason ?? "unknown"}`, {
-      abortReason: response.abortReason,
-    });
-  }
-
-  // If serverOutputs are defined, the SDK extracts via XML markers — use those.
-  if (options.serverOutputs?.length && response?.outputs) {
-    return finalizeServerOutputs(options, response);
-  }
-
-  // Else: legacy JSON parse path
-  const raw = typeof response === "string" ? response : extractText(response);
-  return finalizeJsonOutput(options, raw, response);
+  // Unreachable: the loop either returns or throws.
+  throw lastError ?? new AiPromptError("sdk_error", "runSinglePrompt exited without a result");
 }
 
 // -----------------------------------------------------------------------------
