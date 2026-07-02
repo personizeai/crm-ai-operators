@@ -70,28 +70,37 @@ export const syncCallTranscriptsBulk: OperationEntry = {
   run_mode: "manual", // Not triggered per-event. Run on schedule or manually for batch jobs.
 
   run: async (input, context) => {
-    const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
-    const compiledFilter = compileFilter(filter);
+    // Dispatcher may pre-load records when dispatch_mode: "batch" — avoids double-recall.
+    // Fall back to own recall when invoked standalone (CLI, direct call, per-record dispatch).
+    const preloaded = (input as { records?: ConversationRow[] }).records;
 
-    // Fetch eligible conversations
     let records: ConversationRow[];
-    try {
-      records = (await retrieveRecords({
-        type: compiledFilter.collection,
-        conditions: compiledFilter.conditions,
-        logic: compiledFilter.logic,
-        limit: compiledFilter.limit,
-      })) as ConversationRow[];
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error("sync.call-transcripts-bulk: recall failed", { error: msg });
-      return {
-        ok: false,
-        runId: context.runId,
-        operation: PROCESSOR_TAG,
-        dryRun: context.dryRun,
-        summary: `Recall failed: ${msg}`,
-      };
+    if (preloaded) {
+      records = preloaded;
+      logger.info("sync.call-transcripts-bulk: using pre-loaded records from dispatcher", {
+        count: records.length,
+      });
+    } else {
+      const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
+      const compiledFilter = compileFilter(filter);
+      try {
+        records = (await retrieveRecords({
+          type: compiledFilter.collection,
+          conditions: compiledFilter.conditions,
+          logic: compiledFilter.logic,
+          limit: compiledFilter.limit,
+        })) as ConversationRow[];
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error("sync.call-transcripts-bulk: recall failed", { error: msg });
+        return {
+          ok: false,
+          runId: context.runId,
+          operation: PROCESSOR_TAG,
+          dryRun: context.dryRun,
+          summary: `Recall failed: ${msg}`,
+        };
+      }
     }
 
     // Filter rows: must have at least one entity identifier + non-empty transcript
