@@ -1,0 +1,40 @@
+# Local Personize Private gateway for developing/validating private mode.
+#
+#   PERSONIZE_API_KEY=sk_live_...  OPENROUTER_API_KEY=sk-or-...  docker compose -f docker-compose.gateway.yml up
+#
+# Then point the engine at it:
+#   PERSONIZE_MODE=private PERSONIZE_GATEWAY_URL=http://localhost:3000 \
+#     PERSONIZE_GATEWAY_KEY=$GATEWAY_API_KEY npm test
+#
+# See docs/PERSONIZE-PRIVATE.md and the Personize Private handbook.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: personize
+      POSTGRES_PASSWORD: personize
+      POSTGRES_DB: personize
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U personize"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    image: ghcr.io/personizeai/personize-gateway:stable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://personize:personize@postgres:5432/personize
+      # Connected-mode license (a free Personize plan works). Or install a signed bundle.
+      PERSONIZE_API_KEY: ${PERSONIZE_API_KEY}
+      PERSONIZE_BASE_URL: https://agent.personize.ai
+      # Bearer callers use to reach the gateway (>= 20 chars).
+      GATEWAY_API_KEY: ${GATEWAY_API_KEY:-local-dev-gateway-key-please-change}
+      # Inference — BYOK for local dev.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    ports:
+      - "3000:3000"
