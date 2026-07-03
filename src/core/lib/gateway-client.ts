@@ -142,6 +142,10 @@ export function createGatewayClient(opts: GatewayClientOptions): any {
           if (item.email) body.email = item.email;
           if (item.websiteUrl) body.websiteUrl = item.websiteUrl;
           if (item.recordId) body.entityId = item.recordId;
+          // Forward the collection target so the gateway writes into the right
+          // collection (persist.ts resolves collectionId, else collectionName).
+          if (item.collectionId) body.collectionId = item.collectionId;
+          if (item.collectionName) body.collectionName = item.collectionName;
           // Gateway extracts per-collection; a properties-only save writes them
           // authoritatively. No content = no extraction, which is what we want here.
           await http.post("/memory/save", body);
@@ -192,8 +196,31 @@ export function createGatewayClient(opts: GatewayClientOptions): any {
       },
     },
 
-    // ---- governance docs (governance.loadGuideline) -----------------------
+    // ---- governance docs (governance.loadGuideline / loadGuidelines) -------
+    // loadGuideline calls context.list({ type: "guideline" }) and matches by
+    // name/slug, so the shim MUST expose list (not just retrieve) or governed
+    // operations see empty governance on the gateway.
     context: {
+      async list(payload?: { type?: string }) {
+        try {
+          // Hosted context.list is GET /api/v1/context (a by-name/id lookup); the
+          // gateway is queried with the same type scope server-side. Endpoint shape
+          // pending live validation — fails soft to [].
+          const qs = payload?.type ? `?type=${encodeURIComponent(payload.type)}` : "";
+          const resp = await http.get(`/context${qs}`);
+          const docs = (resp?.data ?? resp?.documents ?? resp ?? []) as any[];
+          const data = (Array.isArray(docs) ? docs : [docs]).map((d: any) => ({
+            name: d?.name ?? d?.title,
+            slug: d?.slug,
+            value: d?.content ?? d?.body ?? d?.value,
+            content: d?.content ?? d?.body,
+          }));
+          return { data };
+        } catch (error) {
+          logger.warn("gateway.context.list failed", { error: errMsg(error) });
+          return { data: [] };
+        }
+      },
       async retrieve(payload: { contextNames?: string[]; types?: string[] }) {
         const name = payload?.contextNames?.[0];
         try {

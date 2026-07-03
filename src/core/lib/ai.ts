@@ -215,20 +215,6 @@ export async function ai<T extends z.ZodTypeAny>(
   return runAi(options, options.autonomous ? "subagent" : "prompt");
 }
 
-/** @deprecated Use ai() — autonomous defaults to false (governed prompt). */
-export async function aiPrompt<T extends z.ZodTypeAny>(
-  options: AiPromptOptions<T>,
-): Promise<AiResult<z.infer<T>>> {
-  return runAi(options, "prompt");
-}
-
-/** @deprecated Use ai({ autonomous: true }) */
-export async function aiSubagent<T extends z.ZodTypeAny>(
-  options: AiPromptOptions<T>,
-): Promise<AiResult<z.infer<T>>> {
-  return runAi(options, "subagent");
-}
-
 async function runAi<T extends z.ZodTypeAny>(
   options: AiPromptOptions<T>,
   verb: "prompt" | "subagent",

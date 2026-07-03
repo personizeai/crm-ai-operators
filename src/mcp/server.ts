@@ -144,15 +144,16 @@ server.tool(
     description: z.string().optional().describe("What this route does and when it fires"),
     priority: z.number().int().describe("Evaluation order. Lower number = higher priority."),
     filter_json: z.string().describe('JSON string matching CompiledFilter shape: { "collection": "contact", "conditions": [{"propertyName": "lead_status", "operator": "equals", "value": "New"}], "logic": "AND", "limit": 50 }'),
-    target_type: z.enum(["operation", "task", "subagent"]).describe("What to call when this route matches"),
-    target_name: z.string().describe("Operation name (e.g. score.icp-fit), task_type, or subagent name"),
+    target_type: z.enum(["operation", "task", "subagent", "triage"]).describe("What to call when this route matches. 'triage' lets a cheap-tier agent pick the operation per record."),
+    target_name: z.string().describe("Operation name (e.g. score.icp-fit), task_type, or subagent name. Ignored for triage / when target_chain is set."),
+    target_chain: z.array(z.string()).optional().describe("Per-record operation pipeline, run in order, stopping at the first failure (e.g. [\"research.contact-background\",\"score.lead-quality\"]). Takes precedence over target_type."),
     max_per_cycle: z.number().int().optional().describe("Max leads per dispatch cycle. Default: 50"),
     enabled: z.boolean().optional().describe("Whether the route is active. Default: true"),
   },
   async (args: {
     route_id: string; name: string; description?: string; priority: number;
-    filter_json: string; target_type: "operation" | "task" | "subagent";
-    target_name: string; max_per_cycle?: number; enabled?: boolean;
+    filter_json: string; target_type: "operation" | "task" | "subagent" | "triage";
+    target_name: string; target_chain?: string[]; max_per_cycle?: number; enabled?: boolean;
   }) => {
     if (!canWrite()) {
       return { content: [{ type: "text", text: `Profile ${PROFILE} cannot create routes` }] };
@@ -176,6 +177,7 @@ server.tool(
         filter_json: args.filter_json,
         target_type: args.target_type,
         target_name: args.target_name,
+        ...(args.target_chain ? { target_chain: JSON.stringify(args.target_chain) } : {}),
         max_per_cycle: args.max_per_cycle ?? 50,
         enabled: args.enabled ?? true,
         created_at: new Date().toISOString(),
@@ -195,15 +197,16 @@ server.tool(
     description: z.string().optional(),
     priority: z.number().int().optional(),
     filter_json: z.string().optional().describe("Full replacement filter_json — must be valid JSON"),
-    target_type: z.enum(["operation", "task", "subagent"]).optional(),
+    target_type: z.enum(["operation", "task", "subagent", "triage"]).optional(),
     target_name: z.string().optional(),
+    target_chain: z.array(z.string()).optional().describe("Per-record operation pipeline (replaces the whole chain)."),
     max_per_cycle: z.number().int().optional(),
     enabled: z.boolean().optional(),
   },
   async (args: {
     route_id: string; name?: string; description?: string; priority?: number;
-    filter_json?: string; target_type?: "operation" | "task" | "subagent";
-    target_name?: string; max_per_cycle?: number; enabled?: boolean;
+    filter_json?: string; target_type?: "operation" | "task" | "subagent" | "triage";
+    target_name?: string; target_chain?: string[]; max_per_cycle?: number; enabled?: boolean;
   }) => {
     if (!canWrite()) {
       return { content: [{ type: "text", text: `Profile ${PROFILE} cannot update routes` }] };
@@ -217,10 +220,14 @@ server.tool(
         return { content: [{ type: "text", text: "Invalid filter_json: must be valid JSON" }] };
       }
     }
-    const { route_id, ...updates } = args;
+    const { route_id, target_chain, ...updates } = args;
     await setProperties(
       { type: "dispatch_route", collection: "dispatch-routes", recordId: route_id },
-      { ...updates, updated_at: new Date().toISOString() },
+      {
+        ...updates,
+        ...(target_chain ? { target_chain: JSON.stringify(target_chain) } : {}),
+        updated_at: new Date().toISOString(),
+      },
     );
     return { content: [{ type: "text", text: `Route updated: ${route_id}` }] };
   },

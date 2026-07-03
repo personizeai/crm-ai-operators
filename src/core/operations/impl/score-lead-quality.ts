@@ -38,6 +38,8 @@ interface ContactRecord {
   buying_stage?: string;
   pain_points?: string[];
   interests?: string[];
+  /** CRM object id — drives the CRM writeback path (mirrorScoreToCrm). */
+  crm_record_id?: string;
   [key: string]: unknown;
 }
 

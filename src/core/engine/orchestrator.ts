@@ -132,9 +132,15 @@ export async function resetOrchestratorErrors(): Promise<void> {
 // Budget is denominated in Personize credits (what the SDK meters as
 // creditsCharged), so budget and spend are the same unit — no invented USD rate.
 // The counter is persisted in orchestrator-config and rolls over by date.
-// Accounting is intentionally approximate: spend is recorded once per dispatch
-// cycle (not per operation), so under concurrency the cap can overshoot by at
-// most one cycle's worth of work — bounded by max_per_cycle.
+//
+// Accounting is intentionally approximate. The cap is checked before each cycle
+// and before opening each route. Within a route, only the SEQUENTIAL path also
+// stops mid-route once the running total hits the cap; the PARALLEL and BATCH
+// paths dispatch their whole eligible slice, so such a route can overshoot the
+// cap by up to its max_per_cycle worth of spend before the next route/cycle is
+// blocked. Spend is recorded once per cycle (not per operation). NOTE: subagent
+// routes and the triage-decision call bypass runOperation, so their spend is not
+// metered into the counter at all.
 // ---------------------------------------------------------------------------
 
 function todayStr(): string {

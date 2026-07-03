@@ -33,6 +33,8 @@ interface CompanyRecord {
   signal_strength?: string;
   icp_fit_score?: number;
   icp_fit_score_updated_at?: string;
+  /** CRM object id — drives the CRM writeback path (mirrorScoreToCrm). */
+  crm_record_id?: string;
   [key: string]: unknown;
 }
 

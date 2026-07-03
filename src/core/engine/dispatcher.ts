@@ -134,6 +134,18 @@ async function loadDispatchRoutes(): Promise<DispatchRoute[]> {
       limit: 100,
     });
     const routes = (res as DispatchRoute[]).filter((r) => r.enabled === true || r.enabled === "true");
+    // target_chain is stored as a JSON string in Personize (arrays are stringified on
+    // write); parse it back to an array so runChain/dispatchOne see a real list.
+    for (const r of routes) {
+      if (typeof r.target_chain === "string") {
+        try {
+          const parsed = JSON.parse(r.target_chain);
+          r.target_chain = Array.isArray(parsed) ? parsed : undefined;
+        } catch {
+          r.target_chain = undefined;
+        }
+      }
+    }
     return routes.sort((a, b) => Number(a.priority ?? 99) - Number(b.priority ?? 99));
   } catch {
     return [];

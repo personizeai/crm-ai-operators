@@ -18,3 +18,6 @@ report/
 
 # Org-specific manifest overlay — overrides manifests/core/ during setup, never shipped
 manifests/local/
+
+# Scratch/test fixtures — never commit
+scratch-*

@@ -88,6 +88,44 @@ describe("gateway client translation", () => {
     }
   });
 
+  test("context.list normalizes guideline docs to { name, slug, value } (governance path)", async () => {
+    const fakeFetch = async () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ data: [{ name: "icp-definition", slug: "icp-definition", content: "Our ICP is..." }] }),
+      }) as any;
+    const original = globalThis.fetch;
+    (globalThis as any).fetch = fakeFetch;
+    try {
+      const client = createGatewayClient({ baseUrl: "http://gw.local", apiKey: "k" });
+      const res = await client.context.list({ type: "guideline" });
+      assert.equal(res.data[0].name, "icp-definition");
+      assert.equal(res.data[0].value, "Our ICP is...");
+    } finally {
+      (globalThis as any).fetch = original;
+    }
+  });
+
+  test("upsert forwards the collection target to the gateway save body", async () => {
+    let body: any;
+    const fakeFetch = async (_url: string, init: any) => {
+      body = JSON.parse(init.body);
+      return { ok: true, status: 200, text: async () => "{}" } as any;
+    };
+    const original = globalThis.fetch;
+    (globalThis as any).fetch = fakeFetch;
+    try {
+      const client = createGatewayClient({ baseUrl: "http://gw.local", apiKey: "k" });
+      await client.memory.upsert({ type: "company", websiteUrl: "acme.com", collectionName: "companies", properties: { x: "1" } });
+      assert.equal(body.collectionName, "companies");
+      assert.equal(body.entityType, "company");
+    } finally {
+      (globalThis as any).fetch = original;
+    }
+  });
+
   test("a non-ok gateway response fails soft on retrieve", async () => {
     const fakeFetch = async () => ({ ok: false, status: 500, text: async () => "boom" }) as any;
     const original = globalThis.fetch;
