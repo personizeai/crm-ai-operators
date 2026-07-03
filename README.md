@@ -1,8 +1,10 @@
 # CRM Agent Operating System
 
-**Save your revenue team hundreds of hours and thousands of dollars — automated, inside your CRM.**
+> **An autonomous AI operator that runs thousands of governed operations a day on your CRM** — replacing your workflow-and-plugin sprawl with guidelines and operation logic you own, at up to 88% lower cost.
 
-Connect HubSpot or Salesforce to Personize, and AI agents start scoring, enriching, and writing intelligence back into your CRM on day one — governed, audited, and grounded in your data.
+Deploy this repo as an autonomous **AI operator** on your CRM: it runs **thousands of governed operations a day** — scoring, research, enrichment, outreach, analysis, reporting — replacing the stack of workflows, plugins, and point tools you're paying for and stitching together today. You bring the **guidelines, instructions, and custom operation logic**; Personize handles the memory, governance, sync, and AI runtime underneath. Run it inside your own workflows and cut those costs by **up to 88%**.
+
+Connect HubSpot or Salesforce to Personize, and the operator starts scoring, enriching, and writing intelligence back into your CRM on day one — governed, audited, and grounded in your data.
 
 ---
 
