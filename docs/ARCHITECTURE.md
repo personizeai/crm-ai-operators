@@ -19,7 +19,7 @@ flowchart LR
     TRIG["Triggers<br/>webhooks (HMAC) · cron · CLI · MCP agents"]
     DISP["<b>Dispatcher</b><br/>routes are DATA, not code"]
     RUN["Operation runner<br/>run store + audit trail"]
-    OPS["<b>26 governed operations</b><br/>score · research · generate · analyze<br/>act · sync · report · optimize"]
+    OPS["<b>29 governed operations</b><br/>score · research · generate · analyze<br/>act · sync · report · optimize"]
     TRIG --> DISP --> RUN --> OPS
   end
 
@@ -61,7 +61,7 @@ sequenceDiagram
     Note over D,P: ok:false or throw → nothing claimed,<br/>error counted, circuit breaker bumps
 ```
 
-## 3. Three dispatch patterns — chosen per route, in data
+## 3. Five dispatch patterns — chosen per route, in data
 
 ```mermaid
 flowchart TB
@@ -71,6 +71,8 @@ flowchart TB
   Q -->|"sequential<br/>(default)"| S["One record at a time<br/>✔ errors isolated<br/>✔ predictable throughput<br/><i>writes to shared state, high-cost AI</i>"]
   Q -->|"parallel: true"| P["Concurrent, capped (default 8)<br/>✔ wall-clock ≈ slowest record<br/>✔ one failure ≠ cancel the rest<br/><i>independent research / enrichment / scoring</i>"]
   Q -->|"dispatch_mode:<br/>batch"| B["ONE call, full record list<br/>✔ no double-recall<br/>✔ atomic (all-or-nothing)<br/><i>bulk memorize · aggregate reports</i>"]
+  Q -->|"target_chain:<br/>[op, op, …]"| C["Per-record pipeline<br/>✔ ordered ops, stop-on-failure<br/>✔ each step gates the next<br/><i>research → score → generate</i>"]
+  Q -->|"target_type:<br/>triage"| T["Agent picks the op per record<br/>✔ route decided at run time<br/>✔ one lane, many outcomes<br/><i>mixed inbound · unknown intent</i>"]
 ```
 
 Routes also carry **cost control**: `tier_override` (basic / pro / ultra) and `model_override` (BYOK) — route the quick-scan lane to a cheap tier and the executive-facing lane to ultra, without touching operation code.
@@ -92,7 +94,7 @@ Routes also carry **cost control**: `tier_override` (basic / pro / ultra) and `m
 flowchart LR
   E["crm-ai-operators<br/>(same code, both modes)"]
   E -->|"hosted mode<br/>PERSONIZE_SECRET_KEY"| H["Personize Cloud<br/>full surface: subagent research,<br/>evaluate rubric, Bedrock bulk"]
-  E -->|"private mode<br/>gateway URL + key (roadmap)"| G["Personize Private gateway<br/>one Docker container<br/>your Postgres · your LLM (even local)<br/><b>raw CRM data never leaves your network</b>"]
+  E -->|"private mode<br/>gateway URL + key"| G["Personize Private gateway<br/>one Docker container<br/>your Postgres · your LLM (even local)<br/><b>raw CRM data never leaves your network</b>"]
 ```
 
-**The pitch in one sentence:** an open-source library of 26 governed, audited, idempotent AI operations over your CRM — orchestrated by data-driven routes, gated by guidelines your team writes in English, at ~$0.003/memorize and ~$0.001/recall, deployable down to fully air-gapped.
+**The pitch in one sentence:** an open-source library of 29 governed, audited, idempotent AI operations over your CRM — orchestrated by data-driven routes, gated by guidelines your team writes in English, at ~$0.003/memorize and ~$0.001/recall, deployable down to fully air-gapped.

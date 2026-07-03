@@ -164,6 +164,10 @@ crm-ai-operators/
 │   │   ├── operations/
 │   │   │   ├── registry.ts        ← all operations registered here
 │   │   │   └── types.ts           ← OperationEntry, ScaffoldResult, etc.
+│   │   ├── engine/
+│   │   │   ├── dispatcher.ts      ← data-driven route dispatch (5 patterns)
+│   │   │   ├── orchestrator.ts    ← runs routes, circuit breaker
+│   │   │   └── webhook-server.ts  ← HMAC-signed webhook trigger server
 │   │   ├── runtime/
 │   │   │   ├── operation-runner.ts  ← runs operations + audit + run-store
 │   │   │   ├── audit-log.ts       ← JSONL append per day

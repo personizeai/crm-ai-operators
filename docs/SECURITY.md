@@ -36,6 +36,6 @@ You will receive an acknowledgment within 48 hours and a remediation timeline wi
 
 - **No credentials stored by this library.** `PERSONIZE_SECRET_KEY` is the only secret; it is read from env at runtime and never written to disk by any operation.
 - **DRY_RUN=true by default** in `.env.example`. Real writes require explicitly setting `DRY_RUN=false`.
-- **Audit log** (`~/.crm-ai-operators/audit/`) records every operation run locally. It contains operation names, timestamps, and outcomes — not contact PII or CRM credentials.
+- **Audit log** (`data/audit/`) records every operation run locally. It contains operation names, timestamps, and outcomes — not contact PII or CRM credentials.
 - **CRM passthrough** calls go through Personize's API (`/api/v1/crm/{crm}/passthrough`). This library never holds CRM OAuth tokens directly.
 - **AI prompt outputs** are Zod-validated before any property is written. Invalid schema outputs are rejected with a structured error, not silently coerced.
