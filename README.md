@@ -85,6 +85,30 @@ When you land on your dashboard you'll see: *"1,247 contacts and 312 companies a
 
 Your agents can start working on day one. No CSV exports. No prompt engineering for field names. No worrying about audit trails.
 
+### Run it from source (clone)
+
+> The package isn't published to npm yet, so the `npx -y crm-ai-operators` / `npm install -g crm-ai-operators` forms shown below (MCP Path 1, CLI Path 3) don't resolve yet — run from a clone until it ships.
+
+The `npm run …` scripts and the `crm-agent` binary are equivalent: `npm run …` uses `tsx` (no build step); the `crm-agent` binary exists after `npm run build`. Pass CLI args after `--`.
+
+```bash
+git clone https://github.com/personizeai/crm-ai-operators.git
+cd crm-ai-operators
+npm install
+cp .env.example .env                        # set PERSONIZE_SECRET_KEY; keep DRY_RUN=true
+
+npm run setup:verify                        # preflight: auth + what's missing
+npm run setup:diff -- --crm hubspot         # dry-run: shows the personize_* fields it would create
+npm run setup     -- --crm hubspot          # apply: Personize collections, guidelines, CRM fields
+npm run operation:list                      # see all 29 operations
+npm run operate   -- score.icp-fit --crm hubspot   # run one (dry-run by default)
+npm run engine                              # optional: start the dispatcher loop
+```
+
+Prefer the `crm-agent` binary used elsewhere in this README? Run `npm run build` once, then `crm-agent setup apply --crm hubspot`, `crm-agent operation run score.icp-fit`, etc.
+
+**Self-hosted (Personize Private)?** Set `PERSONIZE_MODE=private` + `PERSONIZE_GATEWAY_URL`/`PERSONIZE_GATEWAY_KEY` instead of `PERSONIZE_SECRET_KEY` — see [docs/PERSONIZE-PRIVATE.md](docs/PERSONIZE-PRIVATE.md).
+
 ---
 
 ## What gets created in your CRM
@@ -273,10 +297,10 @@ The skill autoloads in any Claude / Cursor / agent session that's connected to y
 
 ### Path 3 — CLI (for scripts, CI/CD, cron jobs)
 
-For batch jobs, scheduled runs, or local development:
+For batch jobs, scheduled runs, or local development. Until the package is published, use the [from-source](#run-it-from-source-clone) `npm run` equivalents; the global-install form below works once it ships:
 
 ```bash
-npm install -g crm-ai-operators
+npm install -g crm-ai-operators          # (published package — until then: git clone + npm install)
 export PERSONIZE_SECRET_KEY=sk_live_...
 
 # Apply setup: Personize collections + guidelines AND the personize_* custom
