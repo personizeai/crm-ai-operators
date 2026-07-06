@@ -13,6 +13,8 @@ data/audit/*.jsonl
 data/state/*.txt
 ~$*
 
+.superpowers
+
 # Local-only working notes / reports — never committed
 report/
 

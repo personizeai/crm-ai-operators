@@ -113,6 +113,25 @@ Prefer the `crm-agent` binary used elsewhere in this README? Run `npm run build`
 
 ---
 
+### Deploy the engine
+
+This repo ships a Dockerfile plus templates for one-click PaaS deploys:
+
+- **Railway:** use [railway.toml](railway.toml) for GitHub auto-deploys, Dockerfile builds, restarts, and `/health` checks.
+- **Render:** use [render.yaml](render.yaml) as a Render Blueprint with Dockerfile builds, generated webhook secret, and `/health` checks.
+
+The same Docker image can also run on Kubernetes, Azure, GCP, AWS, or on-prem VMs when a team already has infrastructure standards.
+
+After the first deploy, set `PERSONIZE_WEBHOOK_URL` to the public service URL plus `/webhook`, then run:
+
+```bash
+npm run setup:webhooks
+```
+
+For the full deployment flow and platform ranking, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+---
+
 ## What gets created in your CRM
 
 `setup` provisions one namespaced custom property per writeback-flagged field (HubSpot group **Personize**; Salesforce `Personize_*__c`). Two provenances ship to the CRM — **inferred** (LLM-derived) and **extracted** (structured data from public sources / normalization) — while CRM-origin keys and internal append-logs stay Personize-side.

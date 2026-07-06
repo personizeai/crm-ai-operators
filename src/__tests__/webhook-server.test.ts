@@ -132,6 +132,30 @@ describe("webhook-server", () => {
       const res = await httpPost("/unknown", body, { "x-personize-signature": sign(body) });
       assert.equal(res.status, 404);
     });
+
+    test("startWebhookServer falls back to platform PORT", async () => {
+      const previousEnginePort = process.env["ENGINE_PORT"];
+      const previousPort = process.env["PORT"];
+      delete process.env["ENGINE_PORT"];
+      process.env["PORT"] = "0";
+
+      const mod = await import("../core/engine/webhook-server.js");
+      const platformServer = mod.startWebhookServer();
+      try {
+        const platformPort = (platformServer.address() as AddressInfo).port;
+        const res = await fetch(`http://127.0.0.1:${platformPort}/health`);
+
+        assert.equal(res.status, 200);
+      } finally {
+        await new Promise<void>((resolve, reject) =>
+          platformServer.close((err) => (err ? reject(err) : resolve())),
+        );
+        if (previousEnginePort === undefined) delete process.env["ENGINE_PORT"];
+        else process.env["ENGINE_PORT"] = previousEnginePort;
+        if (previousPort === undefined) delete process.env["PORT"];
+        else process.env["PORT"] = previousPort;
+      }
+    });
   });
 
   describe("JSON parsing", () => {

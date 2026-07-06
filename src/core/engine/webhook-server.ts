@@ -175,7 +175,7 @@ export function createWebhookServer(): ReturnType<typeof createServer> {
 }
 
 export function startWebhookServer(): ReturnType<typeof createServer> {
-  const port = Number(process.env["ENGINE_PORT"] ?? 3000);
+  const port = Number(process.env["ENGINE_PORT"] ?? process.env["PORT"] ?? 3000);
   const server = createWebhookServer();
   server.listen(port, () => {
     logger.info("Webhook server listening", { port });

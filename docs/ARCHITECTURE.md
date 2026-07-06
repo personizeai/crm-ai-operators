@@ -90,6 +90,8 @@ Routes also carry **cost control**: `tier_override` (basic / pro / ultra) and `m
 
 ## 5. Deployment: hosted or fully private
 
+The engine is a long-running Dockerized Node service with `/health` and `/webhook` endpoints. It can run locally, on Kubernetes, or on a managed PaaS. The lowest-friction hosted path is Railway first, then Render; both can build from the repo Dockerfile and redeploy automatically from GitHub when an agent or human updates operations, prompts, or dispatcher code. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ```mermaid
 flowchart LR
   E["crm-ai-operators<br/>(same code, both modes)"]
