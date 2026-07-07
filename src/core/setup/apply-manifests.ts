@@ -10,6 +10,7 @@ import { applyEntityTypes, type ApplyEntityTypesResult } from "./apply-entity-ty
 import { applyDocumentTypes, type ApplyDocumentTypesResult } from "./apply-document-types.js";
 import { applyDocumentTags, type ApplyDocumentTagsResult } from "./apply-document-tags.js";
 import { applyGraphRelations, type ApplyGraphRelationsResult } from "./apply-graph-relations.js";
+import { applyDispatchRoutes, type ApplyDispatchRoutesResult } from "./apply-dispatch-routes.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 const CORE_DIR = path.join(MANIFEST_DIR, "core");
@@ -102,7 +103,7 @@ const GuidelineFrontmatterSchema = z.object({
 
 type CollectionManifest = z.infer<typeof CollectionManifestSchema>;
 
-interface ManifestFile {
+export interface ManifestFile {
   name: string;
   fullPath: string;
 }
@@ -113,7 +114,7 @@ interface ManifestFile {
  * from an earlier root; files unique to any root are kept. Missing dirs are
  * skipped silently, so an absent manifests/local/ is a no-op.
  */
-async function resolveOverlayFiles(
+export async function resolveOverlayFiles(
   roots: string[],
   category: string,
   ext: string,
@@ -275,6 +276,7 @@ export interface ApplyManifestsResult {
   documentTypes: ApplyDocumentTypesResult;
   documentTags: ApplyDocumentTagsResult;
   graphRelations: ApplyGraphRelationsResult;
+  dispatchRoutes: ApplyDispatchRoutesResult;
   crmProperties?: ApplyCrmPropertiesResult;
 }
 
@@ -308,16 +310,17 @@ export async function applyManifests(options: ApplyOptions): Promise<ApplyManife
     crmProperties = await applyCrmProperties({ crm, dryRun });
   }
 
-  // Entity/doc/tag/relation registration is independent of the collections,
-  // guidelines and CRM-property provisioning above. Keep each step non-fatal so
-  // an API/backend mismatch here can't abort a run whose core work already
-  // succeeded. Each apply* already handles its own errors; this is a backstop.
+  // Entity/doc/tag/relation/dispatch-route registration is independent of the
+  // collections, guidelines and CRM-property provisioning above. Keep each step
+  // non-fatal so an API/backend mismatch here can't abort a run whose core work
+  // already succeeded. Each apply* already handles its own errors; this is a backstop.
   const entityTypes = await applyEntityTypes(dryRun).catch(nonFatal("entity-types", emptyEntityTypes));
   const documentTypes = await applyDocumentTypes(dryRun).catch(nonFatal("document-types", emptyDocumentTypes));
   const documentTags = await applyDocumentTags(dryRun).catch(nonFatal("document-tags", emptyDocumentTags));
   const graphRelations = await applyGraphRelations(dryRun).catch(nonFatal("graph-relations", emptyGraphRelations));
+  const dispatchRoutes = await applyDispatchRoutes(dryRun);
 
-  return { collections, guidelines, entityTypes, documentTypes, documentTags, graphRelations, crmProperties };
+  return { collections, guidelines, entityTypes, documentTypes, documentTags, graphRelations, dispatchRoutes, crmProperties };
 }
 
 /**

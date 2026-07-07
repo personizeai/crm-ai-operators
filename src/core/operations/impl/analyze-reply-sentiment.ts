@@ -69,6 +69,16 @@ const SEQUENCE_STATUS_MAP: Record<ReplyClassValue, string> = {
   "Bounce": "Bounced",
 };
 
+// Idempotency guard: drop replies this operation already processed. Applied to
+// both self-recalled and dispatcher-preloaded (batch) record sets, since a
+// route filter may not express "processed_by not contains".
+function excludeProcessed(records: ConversationRecord[]): ConversationRecord[] {
+  return records.filter((c) => {
+    const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
+    return !processed.includes("analyze.reply-sentiment");
+  });
+}
+
 async function getUnprocessedReplies(): Promise<ConversationRecord[]> {
   const all = (await retrieveRecords({
     type: "conversation",
@@ -79,10 +89,7 @@ async function getUnprocessedReplies(): Promise<ConversationRecord[]> {
     logic: "AND",
     limit: 50,
   })) as ConversationRecord[];
-  return all.filter((c) => {
-    const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
-    return !processed.includes("analyze.reply-sentiment");
-  });
+  return excludeProcessed(all);
 }
 
 async function appendSignal(contactEmail: string, classification: z.infer<typeof ClassificationSchema>): Promise<void> {
@@ -128,7 +135,10 @@ export const analyzeReplySentiment: OperationEntry = {
       };
     }
 
-    const replies = await getUnprocessedReplies();
+    // Batch dispatch preloads the route's records; otherwise self-recall. Either
+    // way, excludeProcessed enforces idempotency.
+    const preloaded = (input as { records?: ConversationRecord[] } | undefined)?.records;
+    const replies = Array.isArray(preloaded) ? excludeProcessed(preloaded) : await getUnprocessedReplies();
     logger.info("analyze.reply-sentiment: unprocessed replies loaded", { count: replies.length });
 
     if (replies.length === 0) {

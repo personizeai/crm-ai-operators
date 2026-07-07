@@ -1,0 +1,18 @@
+{
+  "route_id": "route_hot_signal_handoff",
+  "priority": 20,
+  "name": "hot-signal-handoff",
+  "description": "Create a rep task when a contact's signal strength crosses the hot threshold. Task target: this only creates a Task record (routeToTask), so it matches the dispatcher's per-record contract exactly — no operation input-shape mismatch.",
+  "enabled": true,
+  "filter": {
+    "collection": "contact",
+    "where": {
+      "signal_strength": { "gte": 80 },
+      "owner_notified_at": { "lt": "now-1d" }
+    },
+    "limit": 50
+  },
+  "target_type": "task",
+  "target_name": "hot-signal-handoff",
+  "max_per_cycle": 20
+}

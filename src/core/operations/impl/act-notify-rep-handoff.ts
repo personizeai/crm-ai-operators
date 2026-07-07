@@ -79,8 +79,9 @@ export const actNotifyRepHandoff: OperationEntry = {
   run_mode: "on-trigger",
   guidelines_required: REQUIRED_GUIDELINES,
   run: async (input, context) => {
-    const inputObj = (input ?? {}) as { contact_email?: string; trigger?: string };
-    const contactEmail = inputObj.contact_email;
+    const inputObj = (input ?? {}) as { contact_email?: string; email?: string; trigger?: string };
+    // Dispatcher per-record/chain routes send `email`; standalone/CLI callers may pass `contact_email`.
+    const contactEmail = inputObj.email ?? inputObj.contact_email;
     const trigger = inputObj.trigger ?? "unspecified";
 
     if (!contactEmail) {

@@ -15,7 +15,13 @@
     { "propertyName": "Target Type", "systemName": "target_type", "type": "options", "autoSystem": false, "options": ["operation", "subagent", "task"], "description": "What the dispatcher calls when this route matches: a registered operation, a Personize subagent, or a task creation." },
     { "propertyName": "Target Name", "systemName": "target_name", "type": "text", "autoSystem": false, "description": "Operation name (e.g. 'analyze.reply-sentiment'), subagent name, or task_type value." },
     { "propertyName": "Instructions Name", "systemName": "instructions_name", "type": "text", "autoSystem": false, "description": "Name of the guideline/instruction document to pass to the subagent. Leave empty to let the subagent use its own defaults." },
+    { "propertyName": "Target Chain", "systemName": "target_chain", "type": "array", "autoSystem": false, "description": "Ordered operation names the record flows through, stopping at the first ok:false. Overrides target_type/target_name. Stored as a JSON string." },
     { "propertyName": "Max Per Cycle", "systemName": "max_per_cycle", "type": "number", "autoSystem": false, "description": "Maximum entities to dispatch via this route per cycle. Default: 50." },
+    { "propertyName": "Parallel", "systemName": "parallel", "type": "boolean", "autoSystem": false, "description": "When true, eligible records for this route dispatch concurrently (bounded by concurrency). Default: false (sequential)." },
+    { "propertyName": "Concurrency", "systemName": "concurrency", "type": "number", "autoSystem": false, "description": "Max simultaneous operations when parallel is true. Default: 8." },
+    { "propertyName": "Dispatch Mode", "systemName": "dispatch_mode", "type": "options", "autoSystem": false, "options": ["per_record", "batch"], "description": "per_record (default): one call per record. batch: one call receives the full record list (target_type: operation only)." },
+    { "propertyName": "Tier Override", "systemName": "tier_override", "type": "text", "autoSystem": false, "description": "Override the AI tier (e.g. basic/pro/ultra) for operations dispatched by this route." },
+    { "propertyName": "Model Override", "systemName": "model_override", "type": "text", "autoSystem": false, "description": "Override the AI model (BYOK) for operations dispatched by this route." },
     { "propertyName": "Created At", "systemName": "created_at", "type": "date", "autoSystem": false, "description": "When this route was created." },
     { "propertyName": "Updated At", "systemName": "updated_at", "type": "date", "autoSystem": false, "description": "When this route was last modified." }
   ]

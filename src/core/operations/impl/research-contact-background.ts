@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { retrieveRecords } from "../../lib/recall.js";
 import { setProperty } from "../../lib/persist.js";
 import { ai, type Tier } from "../../lib/ai.js";
-import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
+import { type Filter } from "../../lib/filter.js";
+import { resolveOperationRecords } from "../../lib/dispatch-input.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
@@ -43,16 +43,6 @@ interface ContactRecord {
   [key: string]: unknown;
 }
 
-async function listContacts(filter: Filter): Promise<ContactRecord[]> {
-  const compiled = compileFilter(filter);
-  return (await retrieveRecords({
-    type: "contact",
-    conditions: compiled.conditions,
-    logic: compiled.logic,
-    limit: compiled.limit,
-  })) as ContactRecord[];
-}
-
 async function persistContactResearch(email: string, output: ContactResearch): Promise<void> {
   // current_title/function/communication_style are auto-synced via serverOutputs mapping.
   // Keep manual writes for: computed timestamp, seniority "unknown" guard, pain_points array join.
@@ -82,8 +72,6 @@ export const researchContactBackground: OperationEntry = {
   requires: ["subagent"], // autonomous web research — hosted only until gateway subagent lands
   skip_if: { property: "job_title", updated_within: "60d" },
   run: async (input, context) => {
-    const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
-
     const guideline = await loadGuideline("account-research");
     if (!guideline) {
       return buildScaffold(
@@ -101,7 +89,12 @@ export const researchContactBackground: OperationEntry = {
       );
     }
 
-    const candidates = await listContacts(filter);
+    const candidates = (await resolveOperationRecords({
+      input,
+      type: "contact",
+      defaultFilter: DEFAULT_FILTER,
+      singleKey: "email",
+    })) as ContactRecord[];
     logger.info("research.contact-background: candidates loaded", { count: candidates.length });
 
     const skipRule = researchContactBackground.skip_if!;
