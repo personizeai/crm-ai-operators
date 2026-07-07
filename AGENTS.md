@@ -93,6 +93,53 @@ If the user genuinely wants the generic starter templates (e.g. a quick kick-the
 tires run), that's allowed — but say so explicitly and note that scoring/outreach
 quality will be generic until the overlay is filled.
 
+## After the first `setup.apply` — show the setup as a diagram
+
+The first time setup provisions an org (collections created, guidelines applied,
+CRM `personize_*` properties added), the user has no visual of what now exists in
+Personize on their behalf. Give them one: **render a Mermaid diagram of the three
+layers and what landed in each**, so they can see their memory + governance + CRM
+surface at a glance instead of reading a JSON result.
+
+Do this **only if your assistant surface renders Mermaid** (e.g. a chat/canvas UI
+that draws ```mermaid fenced blocks). If you're a plain-text CLI that can't render
+it, **skip the diagram** — don't dump raw Mermaid source at the user; a short
+bulleted summary of counts is the fallback. This is a nicety, never a blocker.
+
+When you do render it:
+
+- Trigger it once, right after the **first** successful `setup.apply` for an org
+  (not `setup diff`, and not on later idempotent re-runs where nothing changed).
+- Drive it from the actual `setup.apply` result — the `collections`,
+  `guidelines`, and `crmProperties` it reports — plus the connected CRM. Show real
+  names/counts, never a hard-coded example.
+- Keep it to the three capability layers so it mirrors how this repo is organized:
+  **Memory** (collections), **Governance** (guidelines), **CRM writeback**
+  (`personize_*` fields on the connected objects).
+
+Shape to follow (fill in with the real result — this is illustrative):
+
+```mermaid
+flowchart TD
+  subgraph Personize["Personize — provisioned for you"]
+    subgraph Memory["🧠 Memory layer · collections"]
+      C1[contacts] --- C2[companies] --- C3[signals] --- C4[conversations] --- C5[tasks]
+    end
+    subgraph Governance["📋 Governance layer · guidelines"]
+      G1[icp-definition] --- G2[brand-voice] --- G3[lead-scoring-policy] --- G4[data-hygiene]
+    end
+  end
+  subgraph CRM["🔗 HubSpot — personize_* writeback"]
+    F1[Contacts: 10 fields] --- F2[Companies: 12 fields]
+  end
+  Governance -->|reads before every write| Memory
+  Memory -->|scores & enrichment sync to| CRM
+```
+
+Follow the diagram with one line of plain text stating the totals (e.g. "13
+collections, 18 guidelines, 22 CRM fields on HubSpot") so the summary survives
+even where Mermaid doesn't render.
+
 ## How to use the operations registry
 
 Every operation has a `status`:
