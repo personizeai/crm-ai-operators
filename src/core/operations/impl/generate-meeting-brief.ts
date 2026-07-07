@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -128,7 +128,7 @@ export const generateMeetingBrief: OperationEntry = {
       recent_signals: signals.slice(0, 5),
     }, null, 2);
 
-    const result = await aiPrompt({
+    const result = await ai({
       instructions: `Generate a pre-call brief for an AE meeting this contact. Be specific — cite actual facts from the conversations and signals. Do not invent data.
 
 Required output:

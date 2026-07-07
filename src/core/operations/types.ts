@@ -24,6 +24,10 @@ export interface OperationContext {
   dryRun: boolean;
   mode: OperationMode;
   crm?: CrmId;
+  /** Dispatcher-supplied tier override. Operations fall back to their own default when absent. */
+  tierOverride?: string;
+  /** Dispatcher-supplied model override (BYOK). Operations fall back to their own default when absent. */
+  modelOverride?: string;
 }
 
 export interface OperationResult {
@@ -73,6 +77,13 @@ export interface OperationEntry {
   cost?: OperationCost;
   run_mode?: OperationRunMode;
   guidelines_required?: string[];
+  /**
+   * Backend capabilities this operation needs (keys of Capabilities in config.ts:
+   * "subagent" | "serverOutputs" | "evaluate" | "bulkMemorize" | "filteredQuery" | "webhooks").
+   * The runner refuses the operation with a clear message when the active backend
+   * (hosted vs Personize Private) lacks one. Absent = runs on any backend.
+   */
+  requires?: string[];
   skip_if?: SkipIfRule;
   run(input: unknown, context: OperationContext): Promise<OperationResult>;
 }

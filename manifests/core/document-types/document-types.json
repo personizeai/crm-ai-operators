@@ -1,0 +1,12 @@
+[
+  { "name": "email-draft", "displayName": "Email Draft", "description": "AI-generated email draft awaiting human review or send.", "tags": ["ai-generated", "outbound"] },
+  { "name": "outreach-sequence", "displayName": "Outreach Sequence", "description": "Multi-step email sequence generated for a contact.", "tags": ["ai-generated", "outbound"] },
+  { "name": "meeting-brief", "displayName": "Meeting Brief", "description": "Pre-meeting research and talking points for a rep.", "tags": ["ai-generated"] },
+  { "name": "mutual-action-plan", "displayName": "Mutual Action Plan", "description": "Shared next-steps document for buyer and seller.", "tags": ["ai-generated"] },
+  { "name": "proposal", "displayName": "Proposal", "description": "Sales proposal document for a deal.", "tags": ["ai-generated"] },
+  { "name": "call-summary", "displayName": "Call Summary", "description": "AI-generated summary of a recorded call.", "tags": ["ai-generated", "inbound"] },
+  { "name": "win-loss-report", "displayName": "Win/Loss Report", "description": "Analysis report of deal outcomes.", "tags": ["ai-generated"] },
+  { "name": "pipeline-report", "displayName": "Pipeline Report", "description": "Pipeline health and forecast report.", "tags": ["ai-generated"] },
+  { "name": "icp-profile", "displayName": "ICP Profile", "description": "Ideal customer profile definition document.", "tags": [] },
+  { "name": "playbook", "displayName": "Playbook", "description": "Step-by-step process guide for a sales or success motion.", "tags": [] }
+]

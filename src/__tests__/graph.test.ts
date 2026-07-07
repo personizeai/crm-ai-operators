@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import type { RelationType } from "@personize/sdk";
-import { filterRelations } from "../core/lib/graph.js";
+import { filterRelations, type DeclaredRelation } from "../core/lib/graph.js";
 
 function relType(over: Partial<RelationType> & { typeName: string }): RelationType {
   return {
@@ -35,7 +35,8 @@ describe("filterRelations", () => {
     const { valid, dropped } = filterRelations(
       registry(worksAt),
       "contact",
-      [{ relationType: "works_at", toIdentity: { kind: "domain", value: "acme.com" }, toEntityType: "company" }],
+      // kind:"domain" isn't in the SDK's DeclaredRelation union (pre-existing graph gap); cast to keep the case.
+      [{ relationType: "works_at", toIdentity: { kind: "domain", value: "acme.com" }, toEntityType: "company" }] as unknown as DeclaredRelation[],
     );
     assert.equal(valid.length, 1);
     assert.equal(dropped.length, 0);

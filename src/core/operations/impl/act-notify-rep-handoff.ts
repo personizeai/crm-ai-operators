@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -141,7 +141,7 @@ export const actNotifyRepHandoff: OperationEntry = {
       };
     }
 
-    const result = await aiPrompt({
+    const result = await ai({
       instructions: `Build a rep handoff notification payload for this contact. The trigger was: "${trigger}". Be specific — cite actual facts.
 
 Contact + company + recent conversations:

@@ -54,6 +54,45 @@ Run these on your first turn before responding:
 
 ---
 
+## Before `setup.apply` — interview the business (MANDATORY)
+
+The governance templates under `manifests/core/guidelines/` (`icp-definition.md`,
+`brand-voice.md`, `competitor-policy.md`) ship with **bracketed placeholders**
+(`[your target verticals]`, `[list of target titles]`, …). `setup.apply` upserts
+whatever is on disk **verbatim** — it does NOT ask about the user's business. So
+if you run setup without acting first, the org gets governance full of unfilled
+brackets and every downstream `score.*` / `generate.*` operation reasons against
+placeholder text. That is a broken setup.
+
+Therefore, on any `setup.apply` (or `setup diff`) request, you MUST run a short
+**business interview first** and capture the answers as an org overlay. Do not
+skip this even if the user just says "set it up."
+
+1. **Interview.** Ask the user (batch the questions; don't interrogate one at a
+   time) for at least:
+   - **ICP** — target industries, employee/revenue range, growth stage, required
+     tech stack, and disqualifiers. (→ `icp-definition.md`)
+   - **Brand voice** — tone, words/claims to avoid, sender persona. (→ `brand-voice.md`)
+   - **Competitors** — who they compete with and how to handle competitor
+     mentions. (→ `competitor-policy.md`)
+   - **Scoring weights** if they have a strong opinion; otherwise keep template
+     defaults.
+2. **Write the overlay, never edit core.** For each answered template, write a
+   filled copy to `manifests/local/guidelines/<name>.md` (same `name:` in
+   frontmatter). `manifests/local/` is git-ignored and **wins over
+   `manifests/core/`** per-file at apply time, so a later `setup` never resets the
+   user's answers. Editing the shared `manifests/core/` templates directly is an
+   anti-pattern.
+3. **Confirm, then apply.** Show the filled overlay back to the user, then run
+   `setup diff` and only then `setup.apply`.
+4. **No brackets ship.** Before applying, grep the effective guideline set for
+   `[` placeholder text. If any remain in a guideline that governs scoring or
+   generation, stop and finish the interview — don't apply half-filled governance.
+
+If the user genuinely wants the generic starter templates (e.g. a quick kick-the-
+tires run), that's allowed — but say so explicitly and note that scoring/outreach
+quality will be generic until the overlay is filled.
+
 ## How to use the operations registry
 
 Every operation has a `status`:
@@ -139,6 +178,11 @@ These rules apply to every operation in this repo, every agent that runs them.
    explicitly allows it. Low-confidence AI values write to dedicated AI custom
    properties on the CRM, not to native fields.
 
+5b. **Never `setup.apply` with unfilled governance.** The guideline templates are
+   placeholders. Interview the business and write a `manifests/local/` overlay
+   before applying — see "Before `setup.apply` — interview the business". Applying
+   bracketed templates verbatim is a broken setup, not a valid default.
+
 6. **Idempotence first.** An operation should be safe to re-run on the same
    record. Use `skip_if` to avoid re-doing work that's already fresh.
 
@@ -164,6 +208,10 @@ crm-ai-operators/
 │   │   ├── operations/
 │   │   │   ├── registry.ts        ← all operations registered here
 │   │   │   └── types.ts           ← OperationEntry, ScaffoldResult, etc.
+│   │   ├── engine/
+│   │   │   ├── dispatcher.ts      ← data-driven route dispatch (5 patterns)
+│   │   │   ├── orchestrator.ts    ← runs routes, circuit breaker
+│   │   │   └── webhook-server.ts  ← HMAC-signed webhook trigger server
 │   │   ├── runtime/
 │   │   │   ├── operation-runner.ts  ← runs operations + audit + run-store
 │   │   │   ├── audit-log.ts       ← JSONL append per day

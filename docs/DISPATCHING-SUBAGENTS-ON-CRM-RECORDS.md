@@ -1270,7 +1270,7 @@ When upgrading an existing operation:
 ## See also
 
 - [AI-INSTRUCTIONS.md](AI-INSTRUCTIONS.md) — full options reference, response shapes, all SDK fields
-- [CAPABILITY-MENU.md](CAPABILITY-MENU.md) — the 26 operations a subagent can run on a record
+- [CAPABILITY-MENU.md](CAPABILITY-MENU.md) — the 29 operations a subagent can run on a record
 - [`src/core/lib/ai.ts`](../src/core/lib/ai.ts) — `aiPrompt` (single-shot) and `aiSubagent` (autonomous) wrappers
 - [`src/core/lib/persist.ts`](../src/core/lib/persist.ts) — `setProperty`/`saveRecords` → `memory.upsert` writeback to `personize_*`
 - [`src/core/operations/impl/`](../src/core/operations/impl/) — 26 current operations (candidates for multi-step subagent runs)

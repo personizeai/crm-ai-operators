@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { setProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -143,25 +143,24 @@ export const analyzeBuyingStage: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Infer the buying stage for this contact from their recent conversations and signals. Choose the single most accurate stage. Base your answer only on evidence in the data — do not guess.
 
 Contact + engagement context:
 ${recordContext}`,
           context: `# Signal Definitions\n\n${guidelines["signal-definitions"]}`,
           outputs: StageOutputSchema,
+          // buying_stage and next_best_action are auto-synced to contact properties by the platform.
+          serverOutputs: [
+            { name: "buying_stage",     collectionId: "contacts", propertyId: "buying_stage" },
+            { name: "next_best_action", collectionId: "contacts", propertyId: "next_best_action" },
+          ],
+          memorize: { email: contact.email, type: "Contact" },
           temperature: 0.2,
           maxTokens: 400,
         });
 
-        const now = new Date().toISOString();
-        for (const [propertyName, value] of Object.entries({
-          buying_stage: result.output.buying_stage,
-          next_best_action: result.output.next_best_action,
-          buying_stage_updated_at: now,
-        })) {
-          await setProperty({ type: "contact", email: contact.email }, propertyName, value);
-        }
+        await setProperty({ type: "contact", email: contact.email }, "buying_stage_updated_at", new Date().toISOString());
 
         await workspace.appendUpdate(
           { email: contact.email },

@@ -1,0 +1,303 @@
+<mxfile host="65bd71144e">
+    <diagram name="1 · First-Time Setup (Human + AI Agent)" id="flow1">
+        <mxGraphModel dx="1511" dy="1245" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="780" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title1" value="Flow 1 — First-Time Setup&#xa;How a human + AI agent stand the CRM Agent OS up (one time)" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;whiteSpace=wrap;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="10" width="900" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="b0" value="Human  (RevOps / AE)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;fontColor=#a35b00;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="70" width="1820" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="b1" value="AI Agent  (Claude Code / Cursor / Codex — MCP client)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3fb;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;fontColor=#2f5589;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="200" width="1820" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="b2" value="crm-ai-operators  (this repo · MCP + CLI · 29 operations)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f6f0fa;strokeColor=#9673a6;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;fontColor=#6a4a82;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="330" width="1820" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="b3" value="Personize  (Memory · Governance · Audit)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef7ea;strokeColor=#82b366;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;fontColor=#4e7a35;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="460" width="1820" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="b4" value="CRM  (HubSpot / Salesforce)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fdeeee;strokeColor=#b85450;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;fontColor=#9c3d3a;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="590" width="1820" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="s1" value="&lt;b&gt;1.&lt;/b&gt; Sign up at app.personize.ai&lt;br&gt;→ connect CRM (one OAuth click)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="210" y="108" width="170" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="s2" value="&lt;b&gt;2.&lt;/b&gt; Personize builds live two-way sync&lt;br&gt;→ governed memory of contacts + companies" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="498" width="180" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="ecrm2" value="contacts &amp; companies" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="410" y="628" width="160" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" value="&lt;b&gt;3.&lt;/b&gt; Configure two MCP servers&lt;br&gt;(personize + crm-ai-operators)&lt;br&gt;+ install Personize skill" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="238" width="180" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="s4" value="&lt;b&gt;4.&lt;/b&gt; Agent runs &lt;b&gt;setup diff&lt;/b&gt;&lt;br&gt;(dry-run preview of the&lt;br&gt;personize_* fields)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="368" width="180" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="s5" value="&lt;b&gt;5.&lt;/b&gt; Human reviews proposed&lt;br&gt;fields → approves" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1000" y="108" width="170" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="s6" value="&lt;b&gt;6.&lt;/b&gt; Agent runs &lt;b&gt;setup apply&lt;/b&gt;&lt;br&gt;creates collections + guidelines&lt;br&gt;+ personize_* CRM properties" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1190" y="368" width="180" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="epz6" value="collections + guidelines" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="1195" y="498" width="170" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="ecrm6" value="22 personize_* custom fields" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="1195" y="628" width="170" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="s7" value="&lt;b&gt;7.&lt;/b&gt; Agent runs &lt;b&gt;operation_list&lt;/b&gt;&lt;br&gt;discovers the 29 operations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1390" y="368" width="180" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="2" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="s8" target="s9">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="s8" value="&lt;b&gt;8.&lt;/b&gt; Agent runs an operation in&lt;br&gt;&lt;b&gt;DRY_RUN&lt;/b&gt; (default) → proposes writes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1590" y="238" width="190" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="s9" value="&lt;b&gt;9.&lt;/b&gt; Human reviews writes →&lt;br&gt;flips &lt;b&gt;DRY_RUN=false&lt;/b&gt; for trusted ops" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1590" y="108" width="190" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="s10" value="&lt;b&gt;10.&lt;/b&gt; Ready — agents operate&lt;br&gt;(continues in Flow 2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1590" y="498" width="190" height="66" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;" parent="1" source="s1" target="s2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="esync" value="two-way sync" style="endArrow=block;startArrow=block;html=1;rounded=1;strokeColor=#b85450;dashed=1;fontSize=10;" parent="1" source="ecrm2" target="s2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;" parent="1" source="s2" target="s3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;" parent="1" source="s3" target="s4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;" parent="1" source="s4" target="s5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;" parent="1" source="s5" target="s6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6a" value="provisions" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#82b366;endArrow=block;fontSize=10;" parent="1" source="s6" target="epz6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6b" value="provisions" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;endArrow=block;fontSize=10;" parent="1" source="s6" target="ecrm6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6c" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;" parent="1" source="s6" target="s7" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" parent="1" source="s7" target="s8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;" parent="1" source="s8" target="s9" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="s8" target="s10" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="note1" value="Safe by default: every write simulated until a human opts in (DRY_RUN=false). Writeback only ever touches namespaced personize_* fields." style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#666666;whiteSpace=wrap;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="720" width="1300" height="30" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="2 · Recurring Autonomous Loop" id="flow2">
+        <mxGraphModel dx="1400" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1000" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title2" value="Flow 2 — Recurring Autonomous Loop&#xa;How AI agents operate the CRM on a schedule, unattended" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;whiteSpace=wrap;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="20" width="900" height="46" as="geometry"/>
+                </mxCell>
+                <!-- Trigger -->
+                <mxCell id="trigger" value="&lt;b&gt;Trigger&lt;/b&gt;&lt;br&gt;cron · Claude Code routine · Personize schedule&lt;br&gt;(e.g. weekdays 7AM, hourly, 30 min pre-call, Mondays)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+                    <mxGeometry x="560" y="90" width="360" height="70" as="geometry"/>
+                </mxCell>
+                <!-- Loop phases -->
+                <mxCell id="p1" value="&lt;b&gt;1 · STRATEGIZE&lt;/b&gt;&lt;br&gt;Recall what&#39;s known + what changed,&lt;br&gt;decide what&#39;s worth doing&lt;br&gt;&lt;i&gt;optimize.review-runs · optimize.refine-icp&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                    <mxGeometry x="560" y="240" width="360" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2" value="&lt;b&gt;2 · RUN OPERATIONS&lt;/b&gt;&lt;br&gt;Score · research · generate · sync · analyze&lt;br&gt;&lt;i&gt;prompt (deterministic) or subagent (autonomous)&lt;/i&gt;&lt;br&gt;governed by guidelines, grounded in memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+                    <mxGeometry x="1060" y="430" width="360" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3" value="&lt;b&gt;3 · REVIEW&lt;/b&gt;&lt;br&gt;Check outcomes &amp; gaps&lt;br&gt;&lt;i&gt;report.pipeline-health · report.win-loss&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                    <mxGeometry x="560" y="640" width="360" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4" value="&lt;b&gt;4 · MONITOR &amp; ESCALATE&lt;/b&gt;&lt;br&gt;Surface only what needs a human&lt;br&gt;&lt;i&gt;act.daily-digest · act.notify-rep-handoff&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="430" width="360" height="120" as="geometry"/>
+                </mxCell>
+                <!-- Center -->
+                <mxCell id="center" value="&lt;b&gt;Personize&lt;/b&gt;&lt;br&gt;Memory · Governance · Audit&lt;br&gt;&lt;br&gt;every step is grounded in memory,&lt;br&gt;gated by guidelines, and logged" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+                    <mxGeometry x="600" y="410" width="280" height="160" as="geometry"/>
+                </mxCell>
+                <!-- Side systems -->
+                <mxCell id="crm" value="&lt;b&gt;CRM (HubSpot / Salesforce)&lt;/b&gt;&lt;br&gt;personize_* writeback — every read &amp; write audited" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                    <mxGeometry x="1080" y="640" width="320" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="human" value="&lt;b&gt;Human (RevOps / AE / Leadership)&lt;/b&gt;&lt;br&gt;receives digests &amp; handoffs (Slack / email)&lt;br&gt;adjusts the playbook" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="640" width="320" height="80" as="geometry"/>
+                </mxCell>
+                <!-- Edges: trigger then clockwise loop -->
+                <mxCell id="te" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d6b656;endArrow=block;strokeWidth=2;" edge="1" parent="1" source="trigger" target="p1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="le1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#444444;endArrow=block;strokeWidth=2;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="p1" target="p2">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="le2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#444444;endArrow=block;strokeWidth=2;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="1" source="p2" target="p3">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="le3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#444444;endArrow=block;strokeWidth=2;exitX=0;exitY=0.5;entryX=0.5;entryY=1;" edge="1" parent="1" source="p3" target="p4">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="le4" value="repeat" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#444444;endArrow=block;strokeWidth=2;exitX=0.5;exitY=0;entryX=0;entryY=0.5;fontSize=11;fontStyle=1;" edge="1" parent="1" source="p4" target="p1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Writeback + escalation -->
+                <mxCell id="wb" value="writeback&#xa;personize_* fields" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;endArrow=block;dashed=1;fontSize=10;" edge="1" parent="1" source="p2" target="crm">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="esc" value="notify / hand off" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;endArrow=block;dashed=1;fontSize=10;" edge="1" parent="1" source="p4" target="human">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="adj" value="refine playbook / guidelines" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;endArrow=block;dashed=1;fontSize=10;exitX=0.5;exitY=0;entryX=0.1;entryY=1;" edge="1" parent="1" source="human" target="p4">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <!-- Grounding links to center -->
+                <mxCell id="g1" style="html=1;strokeColor=#82b366;endArrow=none;dashed=1;dashPattern=1 3;" edge="1" parent="1" source="p1" target="center">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="g2" style="html=1;strokeColor=#82b366;endArrow=none;dashed=1;dashPattern=1 3;" edge="1" parent="1" source="p2" target="center">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="g3" style="html=1;strokeColor=#82b366;endArrow=none;dashed=1;dashPattern=1 3;" edge="1" parent="1" source="p3" target="center">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="g4" style="html=1;strokeColor=#82b366;endArrow=none;dashed=1;dashPattern=1 3;" edge="1" parent="1" source="p4" target="center">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="Set the playbook once; the CRM runs itself — and tells you what it did. Agents stay silent unless something crosses a threshold worth a human&#39;s attention." style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#666666;whiteSpace=wrap;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="780" width="1340" height="30" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="3 · AI as Operations Engine" id="flow3">
+        <mxGraphModel dx="1400" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1780" pageHeight="980" math="0" shadow="0">
+            <root>
+                <mxCell id="o0" />
+                <mxCell id="o1" parent="o0" />
+                <mxCell id="o_title" value="Flow 3 — The AI as the Operations Engine&#xa;The agent discovers, selects, chains &amp; runs operations — and authors new ones for the company" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;whiteSpace=wrap;" parent="o1" vertex="1">
+                    <mxGeometry x="40" y="16" width="1300" height="46" as="geometry" />
+                </mxCell>
+                <mxCell id="o_cat" value="Operations Catalog — 26 ops · 9 namespaces&#xa;(discover live via operation_list / crm-agent operation list)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#999999;verticalAlign=top;align=center;fontStyle=1;spacingTop=6;" parent="o1" vertex="1">
+                    <mxGeometry x="40" y="80" width="430" height="755" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_sync" value="&lt;b&gt;sync / crm&lt;/b&gt; · mirror + normalize&lt;br&gt;crm.sync-core · sync.normalize-lifecycle&lt;br&gt;sync.pull-engagements · sync.push-properties" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="128" width="406" height="84" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_research" value="&lt;b&gt;research&lt;/b&gt; · enrich from public sources&lt;br&gt;research.account-deep-dive · research.contact-background" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="220" width="406" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_score" value="&lt;b&gt;score&lt;/b&gt; · rank vs ICP / lead quality&lt;br&gt;score.icp-fit · score.lead-quality" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="286" width="406" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_generate" value="&lt;b&gt;generate&lt;/b&gt; · draft customer-facing assets&lt;br&gt;generate.outreach-sequence · generate.proposal&lt;br&gt;generate.meeting-brief · generate.mutual-action-plan&lt;br&gt;generate.win-back-sequence" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="352" width="406" height="92" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_analyze" value="&lt;b&gt;analyze&lt;/b&gt; · interpret CRM activity&lt;br&gt;analyze.buying-stage · analyze.reply-sentiment&lt;br&gt;analyze.call-summary · analyze.deduplication" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="452" width="406" height="84" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_act" value="&lt;b&gt;act&lt;/b&gt; · notify + hand off to humans&lt;br&gt;act.daily-digest · act.notify-rep-handoff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="544" width="406" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_report" value="&lt;b&gt;report&lt;/b&gt; · pipeline + win/loss narrative&lt;br&gt;report.pipeline-health · report.win-loss" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="610" width="406" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_optimize" value="&lt;b&gt;optimize&lt;/b&gt; · review runs + refine playbook&lt;br&gt;optimize.review-runs · optimize.refine-icp" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="676" width="406" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="ns_setup" value="&lt;b&gt;setup&lt;/b&gt; · provision schema + properties&lt;br&gt;setup.apply · setup.diff · setup.verify" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;fontSize=10;align=left;spacingLeft=8;" parent="o1" vertex="1">
+                    <mxGeometry x="52" y="742" width="406" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="o_engine" value="&lt;b&gt;AI Agent — Orchestration Engine&lt;/b&gt;&lt;br&gt;discovers ops → plans → selects &amp; chains them&lt;br&gt;picks the verb · grounds every call in memory + guidelines" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=3;fontSize=13;" parent="o1" vertex="1">
+                    <mxGeometry x="560" y="100" width="470" height="116" as="geometry" />
+                </mxCell>
+                <mxCell id="o_prompt" value="&lt;b&gt;prompt&lt;/b&gt; — deterministic&lt;br&gt;one governed call → structured output&lt;br&gt;(score · analyze · report)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef3fb;strokeColor=#6c8ebf;fontSize=11;" parent="o1" vertex="1">
+                    <mxGeometry x="560" y="234" width="230" height="70" as="geometry" />
+                </mxCell>
+                <mxCell id="o_subagent" value="&lt;b&gt;subagent&lt;/b&gt; — autonomous&lt;br&gt;plans, calls tools, acts multi-step&lt;br&gt;(research · multi-tool generate / act)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef3fb;strokeColor=#6c8ebf;fontSize=11;" parent="o1" vertex="1">
+                    <mxGeometry x="800" y="234" width="230" height="70" as="geometry" />
+                </mxCell>
+                <mxCell id="o_pipe" value="Example orchestration — &quot;Morning lead triage&quot;  (one of many; the agent composes any chain across namespaces)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;dashed=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontStyle=2;" parent="o1" vertex="1">
+                    <mxGeometry x="560" y="330" width="1180" height="120" as="geometry" />
+                </mxCell>
+                <mxCell id="po1" value="sync.pull-engagements" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="572" y="380" width="190" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="po2" value="score.icp-fit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="792" y="380" width="190" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="po3" value="analyze.buying-stage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="1012" y="380" width="190" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="po4" value="generate.meeting-brief" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="1232" y="380" width="190" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="po5" value="act.daily-digest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="1452" y="380" width="190" height="58" as="geometry" />
+                </mxCell>
+                <mxCell id="pe1" style="html=1;rounded=1;endArrow=block;strokeColor=#444444;" parent="o1" source="po1" target="po2" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="pe2" style="html=1;rounded=1;endArrow=block;strokeColor=#444444;" parent="o1" source="po2" target="po3" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="pe3" style="html=1;rounded=1;endArrow=block;strokeColor=#444444;" parent="o1" source="po3" target="po4" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="pe4" style="html=1;rounded=1;endArrow=block;strokeColor=#444444;" parent="o1" source="po4" target="po5" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="o_pz" value="&lt;b&gt;Personize&lt;/b&gt; — guidelines loaded + memory recalled &lt;b&gt;before every call&lt;/b&gt; · every read &amp; write audited · dry-run by default" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" parent="o1" vertex="1">
+                    <mxGeometry x="560" y="480" width="1180" height="64" as="geometry" />
+                </mxCell>
+                <mxCell id="o_crm" value="&lt;b&gt;CRM (HubSpot / Salesforce)&lt;/b&gt;&lt;br&gt;personize_* writeback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="o1" vertex="1">
+                    <mxGeometry x="560" y="574" width="570" height="60" as="geometry" />
+                </mxCell>
+                <mxCell id="o_human" value="&lt;b&gt;Human (RevOps / AE)&lt;/b&gt;&lt;br&gt;digests &amp; handoffs (Slack / email)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" parent="o1" vertex="1">
+                    <mxGeometry x="1170" y="574" width="570" height="60" as="geometry" />
+                </mxCell>
+                <mxCell id="o_ext" value="Extend the library — the AI is also an author (the engine grows the catalog it draws from)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f0fa;strokeColor=#9673a6;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontStyle=1;fontColor=#6a4a82;" parent="o1" vertex="1">
+                    <mxGeometry x="560" y="670" width="1180" height="140" as="geometry" />
+                </mxCell>
+                <mxCell id="ex1" value="Gap: work the company&#xa;needs, not yet covered" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="572" y="722" width="200" height="64" as="geometry" />
+                </mxCell>
+                <mxCell id="ex2" value="&lt;b&gt;idea&lt;/b&gt;&lt;br&gt;description only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="800" y="722" width="200" height="64" as="geometry" />
+                </mxCell>
+                <mxCell id="ex3" value="&lt;b&gt;scaffold&lt;/b&gt;&lt;br&gt;structure + frontmatter spec" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="1028" y="722" width="200" height="64" as="geometry" />
+                </mxCell>
+                <mxCell id="ex4" value="&lt;b&gt;live&lt;/b&gt;&lt;br&gt;tested, production-ready" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="1256" y="722" width="200" height="64" as="geometry" />
+                </mxCell>
+                <mxCell id="ex5" value="open &lt;b&gt;PR&lt;/b&gt;&lt;br&gt;community grows it ·&lt;br&gt;Personize governs it" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=10;" parent="o1" vertex="1">
+                    <mxGeometry x="1484" y="722" width="200" height="64" as="geometry" />
+                </mxCell>
+                <mxCell id="xe1" style="html=1;rounded=1;endArrow=block;strokeColor=#9673a6;" parent="o1" source="ex1" target="ex2" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="xe2" style="html=1;rounded=1;endArrow=block;strokeColor=#9673a6;" parent="o1" source="ex2" target="ex3" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="xe3" style="html=1;rounded=1;endArrow=block;strokeColor=#9673a6;" parent="o1" source="ex3" target="ex4" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="xe4" style="html=1;rounded=1;endArrow=block;strokeColor=#9673a6;" parent="o1" source="ex4" target="ex5" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="ce_cat" value="reads / discovers" style="html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#666666;fontSize=11;" parent="o1" source="o_cat" target="o_engine" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="ce_eng_pipe" value="composes &amp; runs" style="html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#666666;strokeWidth=2;fontSize=11;" parent="o1" source="o_engine" target="o_pipe" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="ce_pipe_pz" value="each call is governed" style="html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#82b366;fontSize=11;" parent="o1" source="o_pipe" target="o_pz" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="ce_pz_crm" value="writeback" style="html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#b85450;fontSize=10;" parent="o1" source="o_pz" target="o_crm" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="ce_pz_human" value="notify / hand off" style="html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;endArrow=block;strokeColor=#d79b00;fontSize=10;" parent="o1" source="o_pz" target="o_human" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="ce_eng_ext" value="authors new ops" style="html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;endArrow=block;dashed=1;strokeColor=#9673a6;fontSize=11;exitX=0;exitY=0.5;entryX=0;entryY=0;" parent="o1" source="o_engine" target="o_ext" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="ce_live_cat" value="new op joins the catalog" style="html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;endArrow=block;dashed=1;strokeColor=#9673a6;fontSize=10;exitX=0;exitY=0.5;entryX=0.5;entryY=1;" parent="o1" source="ex4" target="o_cat" edge="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+                <mxCell id="o_note" value="Same agent, two roles: operator (runs the 26 ops, grounded &amp; audited) and author (turns an uncovered need into a new governed operation). The library it grows is the library it runs." style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#666666;whiteSpace=wrap;" parent="o1" vertex="1">
+                    <mxGeometry x="40" y="850" width="1700" height="30" as="geometry" />
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

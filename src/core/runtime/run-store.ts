@@ -13,6 +13,12 @@ export interface OperationRunRecord {
   summary?: string;
   started_at?: string;
   completed_at?: string;
+  /** Personize credits charged by AI calls during this run (from the usage sink). */
+  credits_used?: number;
+  /** Total tokens across AI calls during this run. */
+  tokens_used?: number;
+  /** Number of ai() calls made during this run. */
+  ai_calls?: number;
 }
 
 /**

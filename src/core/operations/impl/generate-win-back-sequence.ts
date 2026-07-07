@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { addBusinessDays, isoDate } from "../../lib/dates.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
@@ -146,7 +146,7 @@ export const generateWinBackSequence: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Draft a 3-email win-back sequence for this churned/stalled contact. This is NOT cold outreach — they know us. The angle for each email must be distinct:
 - Email 1: Acknowledge the time gap + one specific thing that's changed or improved since they left
 - Email 2: New value angle — a use case or outcome they haven't seen yet

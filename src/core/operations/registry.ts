@@ -27,6 +27,7 @@ import { reportPipelineHealth } from "./impl/report-pipeline-health.js";
 import { reportWinLoss } from "./impl/report-win-loss.js";
 import { generateMutualActionPlan } from "./impl/generate-mutual-action-plan.js";
 import { syncNormalizeLifecycle } from "./impl/sync-normalize-lifecycle.js";
+import { syncCallTranscriptsBulk } from "./impl/sync-call-transcripts-bulk.js";
 
 const ALL: OperationEntry[] = [
   // setup
@@ -40,6 +41,7 @@ const ALL: OperationEntry[] = [
   syncPushProperties,
   syncPullEngagements,
   syncNormalizeLifecycle,
+  syncCallTranscriptsBulk,
   // research
   researchAccountDeepDive,
   researchContactBackground,
@@ -73,3 +75,18 @@ export const OPERATIONS: Record<string, OperationEntry> = Object.fromEntries(
 );
 
 export const OPERATION_NAMES = Object.keys(OPERATIONS).sort();
+
+/** True when every capability the operation requires is available on the active backend. */
+export function isOperationAvailable(
+  op: OperationEntry,
+  hasCapability: (cap: string) => boolean,
+): boolean {
+  return (op.requires ?? []).every((cap) => hasCapability(cap));
+}
+
+/** Names of operations whose backend requirements the active deployment can't meet. */
+export function unavailableOperations(hasCapability: (cap: string) => boolean): string[] {
+  return ALL.filter((op) => !isOperationAvailable(op, hasCapability))
+    .map((op) => op.name)
+    .sort();
+}

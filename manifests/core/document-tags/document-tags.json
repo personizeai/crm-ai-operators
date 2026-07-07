@@ -1,0 +1,11 @@
+[
+  { "name": "ai-generated", "description": "Content produced by an AI agent." },
+  { "name": "human-reviewed", "description": "Content reviewed or edited by a human." },
+  { "name": "approved", "description": "Approved and ready to use or send." },
+  { "name": "draft", "description": "Work in progress — not finalised." },
+  { "name": "archived", "description": "Historical reference — no longer active." },
+  { "name": "outbound", "description": "Content for outgoing communication." },
+  { "name": "inbound", "description": "Content from or about incoming communication." },
+  { "name": "high-priority", "description": "Requires urgent attention." },
+  { "name": "template", "description": "Reusable pattern or starting point." }
+]

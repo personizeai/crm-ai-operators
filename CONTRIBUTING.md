@@ -57,7 +57,7 @@ Add one import line to `src/core/operations/registry.ts`:
 import { myOperation } from "./impl/category-my-operation.js";
 ```
 
-And add it to the `entries` array in the same file. That's it — the CLI and MCP discover it automatically.
+And add it to the `ALL` array in the same file. That's it — the CLI and MCP discover it automatically.
 
 ### 3. Verify
 

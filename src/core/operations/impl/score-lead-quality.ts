@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
 import { setProperty } from "../../lib/persist.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -38,6 +38,8 @@ interface ContactRecord {
   buying_stage?: string;
   pain_points?: string[];
   interests?: string[];
+  /** CRM object id — drives the CRM writeback path (mirrorScoreToCrm). */
+  crm_record_id?: string;
   [key: string]: unknown;
 }
 
@@ -66,24 +68,21 @@ async function getCompany(domain: string): Promise<CompanyRecord | null> {
   return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as CompanyRecord | null;
 }
 
-async function writeScoreBack(
-  email: string,
+// ai_score/ai_score_reason are synced to Personize by serverOutputs on the ai()
+// call (incl. the private-mode client-side fallback). Here we write only the
+// computed timestamp, which isn't an AI output.
+async function writeTimestamp(email: string): Promise<void> {
+  await setProperty({ type: "contact", email }, "ai_score_updated_at", new Date().toISOString());
+}
+
+// Mirror the scores to the CRM record's personize_* fields so reps see them in
+// HubSpot. Only the two writeback-flagged fields exist as CRM props (not the timestamp).
+async function mirrorScoreToCrm(
   score: number,
   reason: string,
   crmRecordId?: string,
   crm?: CrmId,
 ): Promise<void> {
-  const now = new Date().toISOString();
-  // 1. Source of truth: Personize memory (incl. the updated-at timestamp).
-  for (const [propertyName, value] of Object.entries({
-    ai_score: score,
-    ai_score_reason: reason,
-    ai_score_updated_at: now,
-  })) {
-    await setProperty({ type: "contact", email }, propertyName, value);
-  }
-  // 2. Mirror to the CRM record's personize_* fields so reps see it in HubSpot.
-  // Only the two writeback-flagged fields exist as CRM props (not the timestamp).
   await crmWriteback(
     { crm, type: "contact", crmRecordId },
     { ai_score: score, ai_score_reason: reason },
@@ -164,7 +163,7 @@ export const scoreLeadQuality: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Score this contact 0-100 for lead quality using these weights:
 - Persona match (title/function vs target buyer): 35%
 - Seniority (decision-maker vs influencer vs IC): 20%
@@ -183,12 +182,20 @@ Contact + company:
 ${recordContext}`,
           context: `# ICP Definition\n\n${guidelines["icp-definition"]}\n\n---\n\n# Contact Qualification\n\n${guidelines["contact-qualification"]}\n\n---\n\n# Lead Scoring Policy\n\n${guidelines["lead-scoring-policy"]}`,
           outputs: ScoreOutputSchema,
+          // ai_score and ai_score_reason are auto-synced to contact properties by the platform.
+          serverOutputs: [
+            { name: "ai_score",        collectionId: "contacts", propertyId: "ai_score" },
+            { name: "ai_score_reason", collectionId: "contacts", propertyId: "ai_score_reason" },
+          ],
+          memorize: { email: contact.email, type: "Contact" },
           temperature: 0.2,
           maxTokens: 300,
         });
 
+        await writeTimestamp(contact.email);
+        // serverOutputs already synced the scores to Personize; mirror to the CRM too.
         const crmRecordId = typeof contact.crm_record_id === "string" ? contact.crm_record_id : undefined;
-        await writeScoreBack(contact.email, result.output.ai_score, result.output.ai_score_reason, crmRecordId, context.crm);
+        await mirrorScoreToCrm(result.output.ai_score, result.output.ai_score_reason, crmRecordId, context.crm);
 
         await workspace.appendUpdate(
           { email: contact.email },

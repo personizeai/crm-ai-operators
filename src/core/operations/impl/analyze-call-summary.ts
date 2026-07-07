@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { setProperty, setProperties, appendToProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { createTask } from "../../lib/tasks.js";
@@ -136,7 +136,7 @@ export const analyzeCallSummary: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Extract a structured summary from this ${call.type ?? "call"} engagement.
 
 Subject/Title: ${call.subject ?? "(none)"}

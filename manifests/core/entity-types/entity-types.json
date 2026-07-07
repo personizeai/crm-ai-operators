@@ -1,0 +1,9 @@
+[
+  { "name": "contact", "displayName": "Contact", "description": "A person: lead, prospect, customer, partner, or team member.", "primaryKey": "email", "icon": "user" },
+  { "name": "company", "displayName": "Company", "description": "An organization: account, prospect company, or partner.", "primaryKey": "website_url", "icon": "building" },
+  { "name": "conversation", "displayName": "Conversation", "description": "A single communication event: email, call, meeting, or note.", "primaryKey": "conversation_id", "icon": "message-circle" },
+  { "name": "signal", "displayName": "Signal", "description": "A buying or engagement signal observed for a contact or company.", "primaryKey": "signal_id", "icon": "trending-up" },
+  { "name": "task", "displayName": "Task", "description": "A discrete unit of work assigned to an agent or human.", "primaryKey": "task_id", "icon": "check-square" },
+  { "name": "orchestrator_log", "displayName": "Orchestrator Log", "description": "An engine audit event: dispatch, subagent call, error, or status change.", "primaryKey": "log_id", "icon": "activity" },
+  { "name": "dispatch_route", "displayName": "Dispatch Route", "description": "A routing rule pairing a filter with a target operation.", "primaryKey": "route_id", "icon": "git-branch" }
+]

@@ -6,6 +6,10 @@ import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
 import type { CrmId } from "../operations/types.js";
 import { applyCrmProperties, type ApplyCrmPropertiesResult } from "./apply-crm-properties.js";
+import { applyEntityTypes, type ApplyEntityTypesResult } from "./apply-entity-types.js";
+import { applyDocumentTypes, type ApplyDocumentTypesResult } from "./apply-document-types.js";
+import { applyDocumentTags, type ApplyDocumentTagsResult } from "./apply-document-tags.js";
+import { applyGraphRelations, type ApplyGraphRelationsResult } from "./apply-graph-relations.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 const CORE_DIR = path.join(MANIFEST_DIR, "core");
@@ -140,8 +144,43 @@ async function applyCollections(files: ManifestFile[], dryRun: boolean): Promise
 
   for (const manifest of desired) {
     const slug = manifest.data.slug;
+
     if (existingSlugs.has(slug)) {
-      logger.info("Collection already exists; skipping create (update path TBD)", { slug });
+      // Update: push new properties the local manifest has that aren't in the remote yet.
+      // Full schema replace is not safe; we only add net-new properties.
+      const existingCollection = (existing.data ?? []).find((c: any) => c.slug === slug);
+      const existingSystemNames = new Set<string>(
+        ((existingCollection?.properties ?? []) as any[]).map((p: any) => p.systemName).filter(Boolean)
+      );
+      const netNewProps = manifest.data.properties.filter(
+        (p) => !existingSystemNames.has(p.systemName)
+      );
+
+      if (netNewProps.length === 0) {
+        logger.info("Collection up-to-date; skipping update", { slug });
+        continue;
+      }
+
+      // Guard: can't update without an ID (e.g. malformed API response)
+      if (!existingCollection?.id) {
+        logger.warn("Collection missing id; skipping update", { slug });
+        continue;
+      }
+
+      changed++;
+      if (dryRun) {
+        logger.info("[DRY RUN] Would update collection (add new properties)", { slug, file: manifest.name, netNew: netNewProps.length });
+        continue;
+      }
+
+      // Send existing props + net-new props so the update is safe regardless of
+      // whether the SDK treats `update` as a replace or a merge.
+      const existingProps = (existingCollection.properties ?? []) as typeof netNewProps;
+      await client.collections.update(existingCollection.id, {
+        ...manifest.data,
+        properties: [...existingProps, ...netNewProps],
+      });
+      logger.info("Updated collection", { slug, netNew: netNewProps.length });
       continue;
     }
 
@@ -210,7 +249,18 @@ async function applyGuidelines(files: ManifestFile[], dryRun: boolean): Promise<
   return changed;
 }
 
-export async function applyManifests(options: ApplyOptions) {
+export interface ApplyManifestsResult {
+  [key: string]: unknown;
+  collections: number;
+  guidelines: number;
+  entityTypes: ApplyEntityTypesResult;
+  documentTypes: ApplyDocumentTypesResult;
+  documentTags: ApplyDocumentTagsResult;
+  graphRelations: ApplyGraphRelationsResult;
+  crmProperties?: ApplyCrmPropertiesResult;
+}
+
+export async function applyManifests(options: ApplyOptions): Promise<ApplyManifestsResult> {
   const { dryRun, crm } = options;
 
   // Core templates with the git-ignored local overlay layered on top (local wins).
@@ -240,5 +290,10 @@ export async function applyManifests(options: ApplyOptions) {
     crmProperties = await applyCrmProperties({ crm, dryRun });
   }
 
-  return { collections, guidelines, crmProperties };
+  const entityTypes = await applyEntityTypes(dryRun);
+  const documentTypes = await applyDocumentTypes(dryRun);
+  const documentTags = await applyDocumentTags(dryRun);
+  const graphRelations = await applyGraphRelations(dryRun);
+
+  return { collections, guidelines, entityTypes, documentTypes, documentTags, graphRelations, crmProperties };
 }

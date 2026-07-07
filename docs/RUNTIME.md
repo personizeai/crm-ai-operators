@@ -35,6 +35,21 @@ npm run pipeline -- crm.sync-core --crm hubspot --input '{"since":"1d"}'
 
 Operation mode is for batch work such as CRM sync, AI property backfill, scoring, win-back scans, proposal generation, and safe writeback.
 
+## Engine Mode
+
+Engine mode starts the HTTP webhook server and dispatcher loop:
+
+```bash
+npm run engine
+```
+
+The server exposes:
+
+- `GET /health` for platform health checks.
+- `POST /webhook` for HMAC-signed Personize events.
+
+The port is selected from `ENGINE_PORT`, then platform-provided `PORT`, then `3000`. That makes the same Docker image work locally and on managed platforms such as Railway and Render.
+
 ## Optimization Mode
 
 Optimization mode reviews outcomes and proposes changes to schemas, guidelines, prompts, plays, mappings, and operations. It is the loop that lets humans and agents improve the system between runs.
@@ -46,3 +61,5 @@ Optimization mode reviews outcomes and proposes changes to schemas, guidelines, 
 - MCP and CLI both call the same operation runner.
 - Every run writes an audit event to `data/audit/*.jsonl`.
 - CRM access flows through `src/adapters/{hubspot,salesforce}/adapter.ts` — never via raw `fetch` against CRM endpoints.
+
+For managed deployment, see [DEPLOYMENT.md](DEPLOYMENT.md).

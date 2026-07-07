@@ -1,0 +1,22 @@
+{
+  "name": "Dispatch Routes",
+  "slug": "dispatch-routes",
+  "description": "Ordered routing table. Each route pairs a FILTER (Personize filter conditions JSON) with a target operation or subagent. Dispatcher evaluates routes in ascending priority order; first match claims the entity for that dispatch cycle.",
+  "icon": "git-branch",
+  "color": "#10B981",
+  "primaryKeyField": "route_id",
+  "properties": [
+    { "propertyName": "Route ID", "systemName": "route_id", "type": "text", "autoSystem": false, "description": "Unique route ID. Format: route_<slug>." },
+    { "propertyName": "Priority", "systemName": "priority", "type": "number", "autoSystem": false, "description": "Evaluation order. Lower number = higher priority. Routes with the same priority are evaluated in creation order." },
+    { "propertyName": "Name", "systemName": "name", "type": "text", "autoSystem": false, "description": "Human-readable route name. Examples: 'classify-inbound-replies', 'score-new-mqls'." },
+    { "propertyName": "Description", "systemName": "description", "type": "text", "autoSystem": false, "description": "What this route does and when it fires." },
+    { "propertyName": "Enabled", "systemName": "enabled", "type": "boolean", "autoSystem": false, "description": "Set to false to disable without deleting. Default: true." },
+    { "propertyName": "Filter JSON", "systemName": "filter_json", "type": "text", "autoSystem": false, "description": "JSON string of CompiledFilter shape: { collection, conditions: [{propertyName, operator, value}], limit, logic }." },
+    { "propertyName": "Target Type", "systemName": "target_type", "type": "options", "autoSystem": false, "options": ["operation", "subagent", "task"], "description": "What the dispatcher calls when this route matches: a registered operation, a Personize subagent, or a task creation." },
+    { "propertyName": "Target Name", "systemName": "target_name", "type": "text", "autoSystem": false, "description": "Operation name (e.g. 'analyze.reply-sentiment'), subagent name, or task_type value." },
+    { "propertyName": "Instructions Name", "systemName": "instructions_name", "type": "text", "autoSystem": false, "description": "Name of the guideline/instruction document to pass to the subagent. Leave empty to let the subagent use its own defaults." },
+    { "propertyName": "Max Per Cycle", "systemName": "max_per_cycle", "type": "number", "autoSystem": false, "description": "Maximum entities to dispatch via this route per cycle. Default: 50." },
+    { "propertyName": "Created At", "systemName": "created_at", "type": "date", "autoSystem": false, "description": "When this route was created." },
+    { "propertyName": "Updated At", "systemName": "updated_at", "type": "date", "autoSystem": false, "description": "When this route was last modified." }
+  ]
+}

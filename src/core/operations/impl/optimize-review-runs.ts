@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { retrieveRecords } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { logger } from "../../lib/logger.js";
 import type { OperationEntry } from "../types.js";
 
@@ -128,7 +128,7 @@ export const optimizeReviewRuns: OperationEntry = {
     }
 
     try {
-      const result = await aiPrompt({
+      const result = await ai({
         instructions: `Review the following ${runs.length} operation runs from the last ${daysBack} days. Identify failure clusters, assess overall health, and propose concrete improvements (guideline edits, operation logic fixes, schema changes, or config adjustments).
 
 Stats per operation (sorted by run count):

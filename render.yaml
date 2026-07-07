@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: crm-ai-operators
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PERSONIZE_MODE
+        value: hosted
+      - key: DRY_RUN
+        value: "true"
+      - key: LOG_LEVEL
+        value: info
+      - key: PERSONIZE_SECRET_KEY
+        sync: false
+      - key: PERSONIZE_CRM_CONNECTION_ID
+        sync: false
+      - key: PERSONIZE_WEBHOOK_SECRET
+        generateValue: true
+      - key: PERSONIZE_WEBHOOK_URL
+        sync: false

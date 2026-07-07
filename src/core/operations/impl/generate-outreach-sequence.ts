@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { addBusinessDays, isoDate } from "../../lib/dates.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
+import { VerificationSchema, verificationInstruction, assertApproved } from "../../lib/instruction-patterns.js";
 import { createTask } from "../../lib/tasks.js";
 import { workspace } from "../../lib/workspace.js";
 import type { OperationEntry } from "../types.js";
@@ -29,6 +30,8 @@ const SequenceOutputSchema = z.object({
   email1: EmailSchema,
   email2: EmailSchema,
   email3: EmailSchema,
+  // The model's self-check verdict on its own draft (see verificationInstruction below).
+  verification: VerificationSchema,
 });
 
 interface ContactRecord {
@@ -173,7 +176,7 @@ export const generateOutreachSequence: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Draft a 3-email outreach sequence for this contact. Follow the outreach-playbook example sequences exactly: Email 1 = cold open with specific observation; Email 2 = new angle (different from Email 1); Email 3 = brief binary CTA. Use brand-voice tone rules and the HTML structure from the outreach-playbook. Each email needs:
 - subject (5-120 chars, no ALL CAPS, no excessive punctuation)
 - body_html (using only <p>, <b>/<strong>, <i>/<em>, <a href>, <br> — see outreach-playbook)
@@ -182,7 +185,13 @@ export const generateOutreachSequence: OperationEntry = {
 Return a JSON object with exactly these three keys (no others) — email1, email2, email3 — where each value is an object { subject, body_html, angle }. email1 = cold open, email2 = new angle, email3 = binary CTA.
 
 Contact + company context:
-${recordContext}`,
+${recordContext}` +
+            verificationInstruction(
+              "Every subject 5-120 chars, no ALL CAPS, no excessive punctuation (!!!, ???). " +
+                "body_html uses ONLY <p>, <b>/<strong>, <i>/<em>, <a href>, <br> tags. " +
+                "Tone matches the brand-voice rules above. Email 2's angle is distinct from Email 1's. " +
+                "No unverifiable claims, no placeholder tokens like [FIRST_NAME] left unfilled.",
+            ),
           context: `# Outreach Playbook\n\n${guidelines["outreach-playbook"]}\n\n---\n\n# Brand Voice\n\n${guidelines["brand-voice"]}\n\n---\n\n# Multichannel Rules\n\n${guidelines["multichannel-rules"]}`,
           outputs: SequenceOutputSchema,
           temperature: 0.6,
@@ -190,6 +199,10 @@ ${recordContext}`,
         });
 
         const sequence = result.output;
+
+        // Gate the write on the model's self-check: a rejection throws → caught
+        // below → failed++, and no send-email tasks are created for this contact.
+        assertApproved(sequence.verification);
 
         // 3. Schedule the 3 emails as send-email tasks (today, +3 business days, +6).
         const sendDates = [today, addBusinessDays(today, 3), addBusinessDays(today, 6)];

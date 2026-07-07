@@ -1,0 +1,67 @@
+[
+  {
+    "route_id": "route_score-new-leads",
+    "name": "Score New Leads",
+    "description": "ICP-score contacts with lead_status=New. Runs first (priority 10) so scored leads can be re-routed by lower-priority routes in the same cycle.",
+    "priority": 10,
+    "enabled": true,
+    "filter_json": "{\"collection\":\"contact\",\"conditions\":[{\"propertyName\":\"lead_status\",\"operator\":\"equals\",\"value\":\"New\"}],\"logic\":\"AND\",\"limit\":50}",
+    "target_type": "operation",
+    "target_name": "score.icp-fit",
+    "max_per_cycle": 50,
+    "created_at": "2026-07-01T00:00:00.000Z",
+    "updated_at": "2026-07-01T00:00:00.000Z"
+  },
+  {
+    "route_id": "route_research-hot-accounts",
+    "name": "Research Hot Accounts",
+    "description": "Run account research on companies with lifecycle_stage=MQL that haven't been researched yet (account_research_status is empty).",
+    "priority": 20,
+    "enabled": true,
+    "filter_json": "{\"collection\":\"company\",\"conditions\":[{\"propertyName\":\"lifecycle_stage\",\"operator\":\"equals\",\"value\":\"MQL\"},{\"propertyName\":\"account_research_status\",\"operator\":\"is_empty\",\"value\":null}],\"logic\":\"AND\",\"limit\":25}",
+    "target_type": "operation",
+    "target_name": "research.account-deep-dive",
+    "max_per_cycle": 25,
+    "created_at": "2026-07-01T00:00:00.000Z",
+    "updated_at": "2026-07-01T00:00:00.000Z"
+  },
+  {
+    "route_id": "route_generate-outreach-qualified",
+    "name": "Generate Outreach for Qualified Leads",
+    "description": "Generate personalized outreach sequence for contacts with icp_score >= 70 that don't have outreach_status set yet.",
+    "priority": 30,
+    "enabled": true,
+    "filter_json": "{\"collection\":\"contact\",\"conditions\":[{\"propertyName\":\"icp_score\",\"operator\":\"gte\",\"value\":70},{\"propertyName\":\"outreach_status\",\"operator\":\"is_empty\",\"value\":null}],\"logic\":\"AND\",\"limit\":20}",
+    "target_type": "operation",
+    "target_name": "generate.outreach-sequence",
+    "max_per_cycle": 20,
+    "created_at": "2026-07-01T00:00:00.000Z",
+    "updated_at": "2026-07-01T00:00:00.000Z"
+  },
+  {
+    "route_id": "route_classify-replies",
+    "name": "Classify Inbound Replies",
+    "description": "Analyze sentiment and intent of contacts with reply_received=true that haven't been classified yet.",
+    "priority": 40,
+    "enabled": true,
+    "filter_json": "{\"collection\":\"contact\",\"conditions\":[{\"propertyName\":\"reply_received\",\"operator\":\"equals\",\"value\":true},{\"propertyName\":\"reply_sentiment\",\"operator\":\"is_empty\",\"value\":null}],\"logic\":\"AND\",\"limit\":50}",
+    "target_type": "operation",
+    "target_name": "analyze.reply-sentiment",
+    "max_per_cycle": 50,
+    "created_at": "2026-07-01T00:00:00.000Z",
+    "updated_at": "2026-07-01T00:00:00.000Z"
+  },
+  {
+    "route_id": "route_flag-stale-opportunities",
+    "name": "Flag Stale Opportunities",
+    "description": "Create a human review task for open opportunities with no activity in 14+ days. Routes to task type so a human is alerted.",
+    "priority": 50,
+    "enabled": false,
+    "filter_json": "{\"collection\":\"contact\",\"conditions\":[{\"propertyName\":\"deal_stage\",\"operator\":\"equals\",\"value\":\"In Progress\"},{\"propertyName\":\"days_since_activity\",\"operator\":\"gte\",\"value\":14}],\"logic\":\"AND\",\"limit\":30}",
+    "target_type": "task",
+    "target_name": "review-stale-opportunity",
+    "max_per_cycle": 30,
+    "created_at": "2026-07-01T00:00:00.000Z",
+    "updated_at": "2026-07-01T00:00:00.000Z"
+  }
+]

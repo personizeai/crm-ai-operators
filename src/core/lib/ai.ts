@@ -1,6 +1,8 @@
 import { z } from "zod";
-import { client } from "../config.js";
+import { client, hasCapability } from "../config.js";
 import { logger } from "./logger.js";
+import { reportUsage } from "./usage.js";
+import { setProperty } from "./persist.js";
 
 // -----------------------------------------------------------------------------
 // Types — mirror the relevant subset of @personize/sdk PromptOptions
@@ -54,6 +56,14 @@ export type Tier = "basic" | "pro" | "ultra";
 
 export interface AiPromptOptions<T extends z.ZodTypeAny> {
   /**
+   * When true, runs as an autonomous subagent (agent tools on, governed memory off).
+   * Use for research.*, act.*, and any "plan → use tools → act" task.
+   * Defaults to false: governed prompt (governed memory on, no tool use) for
+   * score.*, analyze.*, report.*, and generate.* structured extraction.
+   */
+  autonomous?: boolean;
+
+  /**
    * Instructions for the model.
    * - string → single-prompt mode (legacy). The wrapper concatenates context and asks for JSON back.
    * - array  → multi-step mode. Each step is one mental act. Last step emits <output> markers.
@@ -74,7 +84,10 @@ export interface AiPromptOptions<T extends z.ZodTypeAny> {
   /** Sampling temperature. Default 0.3. Single-prompt mode only — multi-step uses server defaults per tier. */
   temperature?: number;
 
-  /** Max output tokens. Default 1000. Single-prompt mode only. */
+  /**
+   * Max output tokens. Single-prompt mode only.
+   * Default: 2000 for governed prompts; NO default when autonomous (tier default governs).
+   */
   maxTokens?: number;
 
   /** Model override (BYOK). Without BYOK, use `tier` instead. */
@@ -180,28 +193,26 @@ export class AiPromptError extends Error {
 }
 
 // -----------------------------------------------------------------------------
-// aiPrompt / aiSubagent — the two public verbs.
+// ai() — the single public verb.
 //
-//   aiPrompt   → deterministic structured generation (governed memory on).
-//                Use for score.*, analyze.*, report.*, and generate.* extraction.
-//   aiSubagent → autonomous, tool-using run (agent tools on, governed memory off).
-//                Use for research.*, act.*, and any "plan → use tools → act" task.
+// Both modes hit the same /api/v1/prompt endpoint via the Personize SDK.
+// The `autonomous` flag (on AiPromptOptions) picks which SDK verb to invoke:
 //
-// Both hit the same /api/v1/prompt endpoint and share this code path; they differ
-// only in which SDK verb is invoked (client.ai.prompt vs client.ai.subagent), which
-// flips the autonomy defaults server-side. Requires @personize/sdk >= 0.14.0.
+//   autonomous: false (default) → client.ai.prompt
+//     Governed memory on. Use for score.*, analyze.*, report.*, generate.*
+//     Deterministic structured generation from memory + context.
+//
+//   autonomous: true → client.ai.subagent
+//     Agent tools on, governed memory off. Use for research.*, act.*,
+//     and any "plan → use tools → act" task.
+//
+// Requires @personize/sdk >= 0.14.0.
 // -----------------------------------------------------------------------------
 
-export async function aiPrompt<T extends z.ZodTypeAny>(
+export async function ai<T extends z.ZodTypeAny>(
   options: AiPromptOptions<T>,
 ): Promise<AiResult<z.infer<T>>> {
-  return runAi(options, "prompt");
-}
-
-export async function aiSubagent<T extends z.ZodTypeAny>(
-  options: AiPromptOptions<T>,
-): Promise<AiResult<z.infer<T>>> {
-  return runAi(options, "subagent");
+  return runAi(options, options.autonomous ? "subagent" : "prompt");
 }
 
 async function runAi<T extends z.ZodTypeAny>(
@@ -216,9 +227,44 @@ async function runAi<T extends z.ZodTypeAny>(
     );
   }
 
-  return Array.isArray(options.instructions)
-    ? runMultiStep(options, ai, verb)
-    : runSinglePrompt(options, ai, verb);
+  const result = Array.isArray(options.instructions)
+    ? await runMultiStep(options, ai, verb)
+    : await runSinglePrompt(options, ai, verb);
+
+  // Report cost to the active per-run usage sink (no-op outside one).
+  if (result.usage) {
+    reportUsage({
+      credits: result.usage.creditsCharged,
+      tokens: result.usage.totalTokens ?? result.usage.tokens,
+    });
+  }
+
+  // serverOutputs client-side fallback: when the backend can't sync outputs to
+  // properties server-side (e.g. Personize Private), write them here from the
+  // validated output using the same collectionId/propertyId mapping. This makes
+  // serverOutputs a declarative contract that runs server- OR client-side.
+  if (options.serverOutputs?.length && !hasCapability("serverOutputs") && options.memorize) {
+    await applyServerOutputsClientSide(options, result.output);
+  }
+  return result;
+}
+
+async function applyServerOutputsClientSide<T extends z.ZodTypeAny>(
+  options: AiPromptOptions<T>,
+  output: Record<string, unknown>,
+): Promise<void> {
+  const m = options.memorize!;
+  const type = (m.type ?? "Contact").toLowerCase();
+  for (const so of options.serverOutputs ?? []) {
+    if (!so.collectionId || !so.propertyId) continue; // unstructured output — nothing to write
+    const value = output?.[so.name];
+    if (value === undefined || value === null) continue;
+    await setProperty(
+      { type, email: m.email, websiteUrl: m.websiteUrl, recordId: m.recordId, collection: so.collectionId },
+      so.propertyId,
+      value,
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -230,37 +276,89 @@ async function runSinglePrompt<T extends z.ZodTypeAny>(
   ai: any,
   verb: "prompt" | "subagent",
 ): Promise<AiResult<z.infer<T>>> {
-  const fullPrompt = buildPrompt(options.context, options.instructions as string, options.outputs);
+  const instructions = options.instructions as string;
+  // Only use the server's <output> marker extraction when the backend supports it.
+  // Otherwise fall through to the JSON path and write properties client-side (see runAi).
+  const useServerOutputs = Boolean(options.serverOutputs?.length) && hasCapability("serverOutputs");
 
-  const sdkOpts: Record<string, unknown> = {
+  // When serverOutputs are defined, the server's <output> marker extraction is the
+  // format contract — demanding raw JSON at the same time gives the model two
+  // contradictory output formats. Only add the JSON boilerplate (and the injected
+  // Zod schema shape) on the parse path.
+  const fullPrompt = useServerOutputs
+    ? options.context
+      ? `${options.context}\n\n---\n\n${instructions}`
+      : instructions
+    : buildPrompt(options.context, instructions, options.outputs);
+
+  const baseOpts: Record<string, unknown> = {
     prompt: fullPrompt,
     temperature: options.temperature ?? 0.3,
-    maxTokens: options.maxTokens ?? 1000,
   };
-  attachCommonFields(sdkOpts, options);
+  // Governed prompts get a bounded default. Autonomous runs send no default —
+  // research output sizes vary too much for a fixed client cap, and a silent
+  // truncation surfaces as a confusing invalid_json error. Explicit values win.
+  const maxTokens = options.maxTokens ?? (options.autonomous ? undefined : 2000);
+  if (maxTokens !== undefined) baseOpts.maxTokens = maxTokens;
+  attachCommonFields(baseOpts, options);
 
-  let response: any;
-  try {
-    response = await callAi(ai, sdkOpts, verb);
-  } catch (error) {
-    logger.error("AI prompt failed", { error: errMsg(error) });
-    throw new AiPromptError("sdk_error", errMsg(error));
+  // Self-repair loop: on a validation failure in the JSON parse path, retry ONCE
+  // with the validation error appended so the model can correct its format.
+  const MAX_ATTEMPTS = 2;
+  let lastError: AiPromptError | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const sdkOpts =
+      attempt === 1
+        ? baseOpts
+        : {
+            ...baseOpts,
+            prompt:
+              `${fullPrompt}\n\n---\n\nYour previous response was rejected: ${lastError!.message}\n` +
+              `Respond again following the required format exactly.`,
+          };
+
+    let response: any;
+    try {
+      response = await callAi(ai, sdkOpts, verb);
+    } catch (error) {
+      logger.error("AI prompt failed", { error: errMsg(error) });
+      throw new AiPromptError("sdk_error", errMsg(error));
+    }
+
+    if (response?.aborted) {
+      throw new AiPromptError("aborted_by_model", `Model aborted: ${response.abortReason ?? "unknown"}`, {
+        abortReason: response.abortReason,
+      });
+    }
+
+    // If serverOutputs are defined, the SDK extracts via XML markers — use those.
+    // Server-side extraction failures are not retried here (re-asking rarely fixes them).
+    if (useServerOutputs && response?.outputs) {
+      return finalizeServerOutputs(options, response);
+    }
+
+    // Else: JSON parse path (retryable once on validation failure)
+    const raw = typeof response === "string" ? response : extractText(response);
+    try {
+      return finalizeJsonOutput(options, raw, response);
+    } catch (error) {
+      const retryable =
+        error instanceof AiPromptError &&
+        (error.kind === "invalid_json" || error.kind === "schema_validation");
+      if (retryable && attempt < MAX_ATTEMPTS) {
+        lastError = error as AiPromptError;
+        logger.warn("AI response failed validation — retrying once with the error appended", {
+          kind: lastError.kind,
+        });
+        continue;
+      }
+      throw error;
+    }
   }
 
-  if (response?.aborted) {
-    throw new AiPromptError("aborted_by_model", `Model aborted: ${response.abortReason ?? "unknown"}`, {
-      abortReason: response.abortReason,
-    });
-  }
-
-  // If serverOutputs are defined, the SDK extracts via XML markers — use those.
-  if (options.serverOutputs?.length && response?.outputs) {
-    return finalizeServerOutputs(options, response);
-  }
-
-  // Else: legacy JSON parse path
-  const raw = typeof response === "string" ? response : extractText(response);
-  return finalizeJsonOutput(options, raw, response);
+  // Unreachable: the loop either returns or throws.
+  throw lastError ?? new AiPromptError("sdk_error", "runSinglePrompt exited without a result");
 }
 
 // -----------------------------------------------------------------------------
@@ -277,6 +375,13 @@ async function runMultiStep<T extends z.ZodTypeAny>(
       "schema_validation",
       "Multi-step instructions require `serverOutputs: [{ name, required? }, ...]`. " +
         "Server-side <output> extraction is the only reliable way to capture multi-step results.",
+    );
+  }
+  if (!hasCapability("serverOutputs")) {
+    throw new AiPromptError(
+      "sdk_unavailable",
+      "Multi-step instructions require server-side <output> extraction, which the active " +
+        "backend does not support (e.g. Personize Private). Use a single-prompt instruction instead.",
     );
   }
 

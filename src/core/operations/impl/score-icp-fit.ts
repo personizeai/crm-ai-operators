@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { retrieveRecords } from "../../lib/recall.js";
-import { setProperty } from "../../lib/persist.js";
-import { aiPrompt } from "../../lib/ai.js";
+import { ai } from "../../lib/ai.js";
 import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
@@ -34,6 +33,8 @@ interface CompanyRecord {
   signal_strength?: string;
   icp_fit_score?: number;
   icp_fit_score_updated_at?: string;
+  /** CRM object id — drives the CRM writeback path (mirrorScoreToCrm). */
+  crm_record_id?: string;
   [key: string]: unknown;
 }
 
@@ -47,25 +48,22 @@ async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
   })) as CompanyRecord[];
 }
 
-async function writeScoreBack(
-  domain: string,
+// Personize sync (icp_fit_score/icp_fit_reason) is handled by serverOutputs on the
+// ai() call — including the client-side fallback in private mode. This mirrors the
+// scores to the CRM record's personize_* fields so reps see them in HubSpot.
+async function mirrorScoreToCrm(
   score: number,
   reason: string,
   crmRecordId?: string,
   crm?: CrmId,
 ): Promise<void> {
   try {
-    // 1. Source of truth: Personize memory.
-    await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_score", score);
-    await setProperty({ type: "company", websiteUrl: domain }, "icp_fit_reason", reason);
-    // 2. Mirror to the CRM record's personize_* fields so reps see it in HubSpot.
     await crmWriteback(
       { crm, type: "company", crmRecordId },
       { icp_fit_score: score, icp_fit_reason: reason },
     );
   } catch (error) {
-    logger.warn("Failed to write ICP score back to Personize", {
-      domain,
+    logger.warn("Failed to mirror ICP score to CRM", {
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -157,18 +155,25 @@ export const scoreIcpFit: OperationEntry = {
           continue;
         }
 
-        const result = await aiPrompt({
+        const result = await ai({
           instructions: `Score this company against the ICP definition. Return a JSON object with:\n- icp_fit_score: integer 0-100 (40% firmographic fit, 30% buying signals, 20% engagement, 10% champion potential)\n- icp_fit_reason: one-sentence explanation citing the strongest 1-2 factors\n\nCompany:\n${companyContext}`,
           context: `# ICP Definition\n\n${icpGuideline}`,
           outputs: ScoreOutputSchema,
+          // icp_fit_score and icp_fit_reason are auto-synced to company properties by the platform.
+          serverOutputs: [
+            { name: "icp_fit_score", collectionId: "companies", propertyId: "icp_fit_score" },
+            { name: "icp_fit_reason", collectionId: "companies", propertyId: "icp_fit_reason" },
+          ],
+          memorize: { websiteUrl: company.domain, type: "Company" },
           temperature: 0.2,
           maxTokens: 300,
         });
 
         const { icp_fit_score, icp_fit_reason } = result.output;
 
+        // serverOutputs already synced the scores to Personize; mirror to the CRM too.
         const crmRecordId = typeof company.crm_record_id === "string" ? company.crm_record_id : undefined;
-        await writeScoreBack(company.domain, icp_fit_score, icp_fit_reason, crmRecordId, context.crm);
+        await mirrorScoreToCrm(icp_fit_score, icp_fit_reason, crmRecordId, context.crm);
 
         await workspace.appendUpdate(
           { website_url: company.domain },

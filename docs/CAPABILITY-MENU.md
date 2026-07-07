@@ -34,13 +34,14 @@
 | `sync.push-properties` | live | low | on-trigger | ✓ | Propagate company icp_fit_score → account_score_lift on linked contacts. Returns AI property coverage report. Personize handles CRM writeback natively. |
 | `sync.pull-engagements` | live | medium | on-trigger | ✓ | Process engagements already in Personize (synced natively from CRM/Zapier). Extracts insights, surfaces buying signals, creates action tasks. |
 | `sync.normalize-lifecycle` | live | low | on-trigger | ✓ | Map CRM-specific lifecycle stage values (HubSpot + Salesforce variants) to a canonical unified model. Returns coverage + unmapped values list. |
+| `sync.call-transcripts-bulk` | live | low | manual | ✓ | Bulk AI extraction from call/meeting transcripts via Bedrock Batch (~50% LLM cost saving). Results arrive via webhook within 24h — not immediate. Use for large backlogs or nightly batch jobs. |
 
 ## research
 
 | Operation | Status | Cost | Run mode | Idempotent | What it does |
 |-----------|--------|------|----------|-----------|--------------|
-| `research.account-deep-dive` | scaffold | high | on-trigger | ✓ | Comprehensive account research per the account-research guideline; fills companies + signals + stakeholders. |
-| `research.contact-background` | scaffold | medium | on-trigger | ✓ | Per-contact title history, public content, recent moves; infers communication style and pain points. |
+| `research.account-deep-dive` | live | high | on-trigger | ✓ | Comprehensive account research per the account-research guideline; fills companies + signals + stakeholders. |
+| `research.contact-background` | live | medium | on-trigger | ✓ | Per-contact title history, public content, recent moves; infers communication style and pain points. |
 
 ## score
 
@@ -95,10 +96,10 @@
 
 | Status | Count |
 |--------|-------|
-| live | 24 |
-| scaffold | 2 |
+| live | 29 |
+| scaffold | 0 |
 | idea | 0 |
-| **Total** | **26** |
+| **Total** | **29** |
 
 ---
 

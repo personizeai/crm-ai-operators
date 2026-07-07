@@ -1,0 +1,24 @@
+{
+  "name": "Orchestrator Logs",
+  "slug": "orchestrator-logs",
+  "description": "Append-only audit trail of all engine events: dispatches, subagent calls, supervisor decisions, errors, pauses, resumes. One record per event, linked to the entity that triggered it.",
+  "icon": "activity",
+  "color": "#6366F1",
+  "primaryKeyField": "log_id",
+  "properties": [
+    { "propertyName": "Log ID", "systemName": "log_id", "type": "text", "autoSystem": false, "description": "Unique log entry ID. Format: log_<timestamp36>_<uuid8>." },
+    { "propertyName": "Run ID", "systemName": "run_id", "type": "text", "autoSystem": false, "description": "Groups all log entries from a single dispatch cycle." },
+    { "propertyName": "Event Type", "systemName": "event_type", "type": "options", "autoSystem": false, "options": ["dispatch", "subagent_called", "subagent_done", "supervisor_pass", "supervisor_retry", "supervisor_escalate", "error", "paused", "resumed", "notification_sent"], "description": "What happened in this log entry." },
+    { "propertyName": "Route Name", "systemName": "route_name", "type": "text", "autoSystem": false, "description": "Name of the dispatch route that matched, if applicable." },
+    { "propertyName": "Target Name", "systemName": "target_name", "type": "text", "autoSystem": false, "description": "Operation or subagent that was called." },
+    { "propertyName": "Entity Email", "systemName": "entity_email", "type": "text", "autoSystem": false, "description": "Email of the contact or entity this event relates to." },
+    { "propertyName": "Entity Type", "systemName": "entity_type_ref", "type": "text", "autoSystem": false, "description": "Type of the entity: contact, company, etc." },
+    { "propertyName": "Severity", "systemName": "severity", "type": "options", "autoSystem": false, "options": ["info", "warning", "error", "critical"], "description": "Severity level used for notification routing." },
+    { "propertyName": "Summary", "systemName": "summary", "type": "text", "autoSystem": false, "description": "One-sentence description of what happened." },
+    { "propertyName": "Details JSON", "systemName": "details_json", "type": "text", "autoSystem": false, "description": "JSON-serialised details payload — subagent result, error stack, matched filter conditions, etc." },
+    { "propertyName": "Error Message", "systemName": "error_message", "type": "text", "autoSystem": false, "description": "Error message if event_type = error." },
+    { "propertyName": "Retry Count", "systemName": "retry_count", "type": "number", "autoSystem": false, "description": "How many times this subagent call has been retried by the supervisor." },
+    { "propertyName": "Duration MS", "systemName": "duration_ms", "type": "number", "autoSystem": false, "description": "Wall-clock time in milliseconds for this event." },
+    { "propertyName": "Created At", "systemName": "created_at", "type": "date", "autoSystem": false, "description": "ISO 8601 timestamp when this log entry was written." }
+  ]
+}
