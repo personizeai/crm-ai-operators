@@ -6,10 +6,10 @@
   "color": "#7C3AED",
   "primaryKeyField": "domain",
   "properties": [
-    { "propertyName": "Domain", "systemName": "domain", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "domain" }, "description": "Canonical root company domain." },
-    { "propertyName": "Company Name", "systemName": "company_name", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "name" }, "description": "Legal or common company name." },
-    { "propertyName": "Industry", "systemName": "industry", "type": "text", "autoSystem": true, "source": "extracted", "writeback": true, "crmFields": { "hubspot": "industry" }, "description": "Normalized industry or vertical." },
-    { "propertyName": "Employee Count", "systemName": "employee_count", "type": "number", "autoSystem": false, "source": "extracted", "writeback": true, "crmFields": { "hubspot": "numberofemployees" }, "description": "Known or estimated employee count. Structured data extracted from public sources — writeback-worthy even though it is not LLM-inferred." },
+    { "propertyName": "Domain", "systemName": "domain", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "domain", "salesforce": "Website" }, "description": "Canonical root company domain. Salesforce has no bare-domain field; maps to the Account Website URL." },
+    { "propertyName": "Company Name", "systemName": "company_name", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "name", "salesforce": "Name" }, "description": "Legal or common company name." },
+    { "propertyName": "Industry", "systemName": "industry", "type": "text", "autoSystem": true, "source": "extracted", "writeback": true, "crmFields": { "hubspot": "industry", "salesforce": "Industry" }, "description": "Normalized industry or vertical." },
+    { "propertyName": "Employee Count", "systemName": "employee_count", "type": "number", "autoSystem": false, "source": "extracted", "writeback": true, "crmFields": { "hubspot": "numberofemployees", "salesforce": "NumberOfEmployees" }, "description": "Known or estimated employee count. Structured data extracted from public sources — writeback-worthy even though it is not LLM-inferred." },
     { "propertyName": "Company Size Band", "systemName": "company_size_band", "type": "options", "autoSystem": true, "source": "extracted", "writeback": true, "options": ["1-10", "11-50", "51-200", "201-500", "501-1000", "1001-5000", "5001+", "Unknown"], "description": "Normalized employee size band." },
     { "propertyName": "Business Model", "systemName": "business_model", "type": "options", "autoSystem": true, "source": "extracted", "writeback": true, "options": ["B2B", "B2C", "B2B2C", "Marketplace", "Platform", "Services", "Other", "Unknown"], "description": "Primary business model inferred from website, CRM, and context." },
 

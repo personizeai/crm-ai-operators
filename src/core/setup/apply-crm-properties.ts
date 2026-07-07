@@ -15,13 +15,19 @@ import type { CrmId } from "../operations/types.js";
 // internal log/array fields stay Personize-side.
 //
 // HubSpot: created via the Properties API (idempotent — existing props skipped).
-// Salesforce: custom fields require the Metadata API (not plain REST), so we
-// emit the list of fields to create as a documented manual step.
+// Salesforce: created via the Tooling API's CustomField sObject, which lives
+// under /services/data/ and so is reachable through the Personize passthrough
+// (idempotent — duplicate fields are skipped). Note: Tooling-created fields are
+// hidden from every profile by default, so setup emits a one-line FLS reminder.
 // -----------------------------------------------------------------------------
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 const PERSONIZE_PREFIX = "personize_";
 const HUBSPOT_GROUP = "personize";
+const SF_API_VERSION = "v60.0";
+const SF_PREFIX = "Personize_";
+/** Salesforce Field labels are capped at 40 chars. */
+const SF_LABEL_MAX = 40;
 
 interface ManifestProperty {
   propertyName: string;
@@ -38,10 +44,20 @@ interface ManifestCollection {
   properties: ManifestProperty[];
 }
 
-/** CRM object each collection maps to. Only these are provisioned. */
+/** HubSpot object each collection maps to. Only these are provisioned. */
 const COLLECTION_TO_OBJECT: Record<string, string> = {
   contacts: "contacts",
   companies: "companies",
+};
+
+/**
+ * Salesforce object(s) each collection maps to. The unified `contacts`
+ * collection spans both Lead (pre-conversion) and Contact (post-conversion), so
+ * writeback fields are provisioned on both — scores land wherever the person is.
+ */
+const SF_COLLECTION_TO_OBJECTS: Record<string, string[]> = {
+  contacts: ["Contact", "Lead"],
+  companies: ["Account"],
 };
 
 interface HubspotFieldType {
@@ -152,18 +168,100 @@ async function applyHubspotObject(
   }
 }
 
-function describeSalesforceManual(
-  objectType: string,
+/** `ai_score` → `Personize_Ai_Score__c`. Pure — the SF custom-field API name. */
+export function salesforceApiName(systemName: string): string {
+  const pascal = systemName
+    .split("_")
+    .filter(Boolean)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join("_");
+  return `${SF_PREFIX}${pascal}__c`;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : value.slice(0, max);
+}
+
+function salesforceValueSet(options?: string[]): Record<string, unknown> {
+  return {
+    valueSetDefinition: {
+      sorted: false,
+      value: (options ?? []).map((opt) => ({ fullName: opt, default: false, label: opt })),
+    },
+  };
+}
+
+/**
+ * Tooling API `CustomField.Metadata` for one manifest property. Pure — maps the
+ * manifest's type to a Salesforce field type. Text caps at 255 (single-line);
+ * Checkbox carries a required default; Picklist/Multiselect carry the options.
+ */
+export function salesforceFieldMetadata(p: ManifestProperty): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    label: truncate(`Personize ${p.propertyName}`, SF_LABEL_MAX),
+    ...(p.description ? { description: p.description, inlineHelpText: truncate(p.description, 255) } : {}),
+  };
+  switch (p.type) {
+    case "number":
+      return { ...base, type: "Number", precision: 18, scale: 0 };
+    case "boolean":
+      return { ...base, type: "Checkbox", defaultValue: false };
+    case "date":
+      return { ...base, type: "Date" };
+    case "options":
+      return { ...base, type: "Picklist", valueSet: salesforceValueSet(p.options) };
+    case "array":
+      return { ...base, type: "MultiselectPicklist", visibleLines: 4, valueSet: salesforceValueSet(p.options) };
+    case "text":
+    default:
+      return { ...base, type: "Text", length: 255 };
+  }
+}
+
+async function applySalesforceObject(
+  object: string,
   props: ManifestProperty[],
+  dryRun: boolean,
   result: ApplyCrmPropertiesResult,
-): void {
+): Promise<void> {
+  let notedFls = false;
   for (const p of props) {
-    const apiName = `Personize_${p.systemName
-      .split("_")
-      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-      .join("_")}__c`;
-    result.manual++;
-    result.details.push(`salesforce/${objectType}: create custom field ${apiName} (${p.type}) — Metadata API / manual`);
+    const apiName = salesforceApiName(p.systemName);
+    const metadata = salesforceFieldMetadata(p);
+
+    if (dryRun) {
+      result.created++;
+      result.details.push(`[DRY RUN] salesforce/${object}: would create ${apiName} (${metadata.type as string})`);
+      continue;
+    }
+
+    try {
+      await crmPassthrough({
+        crm: "salesforce",
+        method: "POST",
+        path: `/services/data/${SF_API_VERSION}/tooling/sobjects/CustomField`,
+        body: { FullName: `${object}.${apiName}`, Metadata: metadata },
+      });
+      result.created++;
+      result.details.push(`salesforce/${object}: created ${apiName}`);
+      if (!notedFls) {
+        // Tooling-created fields are invisible until FLS is granted.
+        result.details.push(
+          `salesforce/${object}: grant field-level security on the Personize_* fields to the relevant profiles / permission sets`,
+        );
+        notedFls = true;
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Salesforce reports a duplicate field via DUPLICATE_* / "already in use".
+      if (/DUPLICATE|already exists|already in use/i.test(msg)) {
+        result.skipped++;
+        result.details.push(`salesforce/${object}: ${apiName} already exists; skipped`);
+      } else {
+        logger.warn("Failed to create Salesforce field", { object, apiName, error: msg });
+        result.details.push(`salesforce/${object}: FAILED ${apiName} — ${msg}`);
+      }
+    }
   }
 }
 
@@ -180,7 +278,9 @@ export async function applyCrmProperties(options: ApplyCrmPropertiesOptions): Pr
     if (crm === "hubspot") {
       await applyHubspotObject(objectType, props, dryRun, result);
     } else if (crm === "salesforce") {
-      describeSalesforceManual(objectType, props, result);
+      for (const sfObject of SF_COLLECTION_TO_OBJECTS[slug] ?? []) {
+        await applySalesforceObject(sfObject, props, dryRun, result);
+      }
     } else {
       logger.warn("CRM property provisioning not implemented for this CRM; skipping", { crm });
     }
