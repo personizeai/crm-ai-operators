@@ -141,7 +141,7 @@ Expected: all 5 route IDs printed with `filter_json OK`
 PERSONIZE_SECRET_KEY=sk_live_your_key_here
 DRY_RUN=true
 LOG_LEVEL=info
-PERSONIZE_API_BASE_URL=https://api.personize.ai
+PERSONIZE_API_BASE_URL=https://agent.personize.ai
 PERSONIZE_CRM_CONNECTION_ID=
 MCP_PROFILE=planner
 ```
@@ -158,7 +158,7 @@ Replace the file with:
 ```
 # Personize API credentials
 PERSONIZE_SECRET_KEY=sk_live_your_key_here
-PERSONIZE_API_BASE_URL=https://api.personize.ai
+PERSONIZE_API_BASE_URL=https://agent.personize.ai
 PERSONIZE_CRM_CONNECTION_ID=
 
 # Engine safety — dry-run is ON by default; set to false only in production
