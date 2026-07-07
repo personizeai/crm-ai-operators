@@ -42,9 +42,12 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "crm-agent": "dist/scripts/crm-agent.js"
+    "crm-agent": "dist/scripts/crm-agent.js",
+    "crm-ai-operators": "dist/mcp/server.js"
   },
   "scripts": {
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
     "setup": "tsx src/scripts/crm-agent.ts setup apply",
     "setup:diff": "tsx src/scripts/crm-agent.ts setup diff",
     "setup:verify": "tsx src/scripts/crm-agent.ts setup verify",

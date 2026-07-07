@@ -89,7 +89,7 @@ Your agents can start working on day one. No CSV exports. No prompt engineering 
 
 ### Run it from source (clone)
 
-> The package isn't published to npm yet, so the `npx -y crm-ai-operators` / `npm install -g crm-ai-operators` forms shown below (MCP Path 1, CLI Path 3) don't resolve yet — run from a clone until it ships.
+> **npm publish is the last step before the `npx` / `-g` forms below go live.** The package is publish-ready — two bins are wired (`crm-ai-operators` → the MCP stdio server for Path 1, `crm-agent` → the CLI for Path 3) and a `prepare` build produces `dist/` at pack time — but it isn't on the registry yet. Until a maintainer runs `npm publish`, use the from-clone `npm run …` equivalents on this page. Installing straight from git also works now (`npm i -g github:personizeai/crm-ai-operators`), since `prepare` builds on git installs too.
 
 The `npm run …` scripts and the `crm-agent` binary are equivalent: `npm run …` uses `tsx` (no build step); the `crm-agent` binary exists after `npm run build`. Pass CLI args after `--`.
 
@@ -108,6 +108,15 @@ npm run engine                              # optional: start the dispatcher loo
 ```
 
 Prefer the `crm-agent` binary used elsewhere in this README? Run `npm run build` once, then `crm-agent setup apply --crm hubspot`, `crm-agent operation run score.icp-fit`, etc.
+
+> **Fill your governance before `setup` — don't ship the templates blank.** The
+> guidelines under `manifests/core/guidelines/` (ICP, brand voice, competitor
+> policy) contain `[bracketed]` placeholders, and `setup` applies them verbatim.
+> Copy the ones you want to customize into `manifests/local/guidelines/` (git-
+> ignored, and it **overrides** core per-file) and fill in your business —
+> otherwise every scoring and outreach operation reasons against placeholder
+> text. An MCP-connected agent following [AGENTS.md](AGENTS.md) will interview you
+> for these before it applies setup.
 
 **Self-hosted (Personize Private)?** Set `PERSONIZE_MODE=private` + `PERSONIZE_GATEWAY_URL`/`PERSONIZE_GATEWAY_KEY` instead of `PERSONIZE_SECRET_KEY` — see [docs/PERSONIZE-PRIVATE.md](docs/PERSONIZE-PRIVATE.md).
 
@@ -142,11 +151,12 @@ For the full deployment flow and platform ranking, see [docs/DEPLOYMENT.md](docs
 | `personize_buying_stage` | Contacts | inferred | Inferred buying stage |
 | `personize_next_best_action` | Contacts & Companies | inferred | Recommended next step |
 | `personize_sentiment` / `personize_communication_style` | Contacts | inferred | How they feel / how to write to them |
+| `personize_last_signal` | Contacts & Companies | inferred | Most recent buying/engagement signal |
 | `personize_seniority` / `personize_function` / `personize_job_title` | Contacts | extracted | Normalized role data |
 | `personize_icp_fit_score` / `personize_account_score` (+ reasons) | Companies | inferred | Account fit & priority scores |
 | `personize_industry` / `personize_business_model` / `personize_company_size_band` | Companies | extracted | Firmographics |
 | `personize_employee_count` | Companies | extracted | Headcount — structured enrichment, written back even though it isn't LLM-generated |
-| `personize_lifecycle_stage` / `personize_signal_strength` / `personize_last_signal` | Companies | inferred | Account state |
+| `personize_lifecycle_stage` / `personize_signal_strength` | Companies | inferred | Account state |
 
 Writeback is gated by an explicit `writeback` flag in the collection manifests — *not* by whether a field is AI-generated — so extracted/enriched data syncs alongside inferred scores. 22 fields in total (10 contact, 12 company).
 
@@ -243,7 +253,7 @@ All configuration is via environment variables (e.g. a local `.env` — see [`.e
 |---|---|---|---|
 | `PERSONIZE_SECRET_KEY` | yes | — | Your Personize API key (`sk_live_…`). The only credential you need — Personize handles CRM OAuth. |
 | `DRY_RUN` | no | `true` | When `true` (default) operations simulate writes and change nothing. Set `false` to perform live writes. |
-| `PERSONIZE_API_BASE_URL` | no | `https://api.personize.ai` | Override the Personize API endpoint. |
+| `PERSONIZE_API_BASE_URL` | no | `https://agent.personize.ai` | Override the Personize API endpoint. |
 | `PERSONIZE_CRM_CONNECTION_ID` | no | org default | Pin a specific CRM connection when your org has more than one. |
 
 ---
