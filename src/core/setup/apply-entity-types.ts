@@ -53,19 +53,27 @@ export async function applyEntityTypes(dryRun: boolean): Promise<ApplyEntityType
   for (const et of desired) {
     const existing = existingByName.get(et.name);
 
-    if (!existing) {
-      if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create entity type: ${et.name}`); continue; }
-      await (client as any).context.create({ type: "entity-type", name: et.name, displayName: et.displayName, description: et.description, primaryKey: et.primaryKey, icon: et.icon });
-      result.created++;
-      result.details.push(`Created entity type: ${et.name}`);
-    } else if (existing.displayName !== et.displayName || existing.description !== et.description) {
-      if (dryRun) { result.updated++; result.details.push(`[DRY RUN] Would update entity type: ${et.name}`); continue; }
-      await (client as any).context.update(existing.id, { displayName: et.displayName, description: et.description, icon: et.icon });
-      result.updated++;
-      result.details.push(`Updated entity type: ${et.name}`);
-    } else {
+    try {
+      if (!existing) {
+        if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create entity type: ${et.name}`); continue; }
+        await (client as any).context.create({ type: "entity-type", name: et.name, displayName: et.displayName, description: et.description, primaryKey: et.primaryKey, icon: et.icon });
+        result.created++;
+        result.details.push(`Created entity type: ${et.name}`);
+      } else if (existing.displayName !== et.displayName || existing.description !== et.description) {
+        if (dryRun) { result.updated++; result.details.push(`[DRY RUN] Would update entity type: ${et.name}`); continue; }
+        await (client as any).context.update(existing.id, { displayName: et.displayName, description: et.description, icon: et.icon });
+        result.updated++;
+        result.details.push(`Updated entity type: ${et.name}`);
+      } else {
+        result.skipped++;
+        result.details.push(`Entity type up-to-date: ${et.name}`);
+      }
+    } catch (error) {
+      const body = (error as any)?.cause?.response?.data;
+      const msg = body?.error?.message ?? body?.message ?? (error instanceof Error ? error.message : String(error));
+      logger.warn("Failed to apply entity type — org's Personize API may not support this manifest type yet", { name: et.name, error: msg });
       result.skipped++;
-      result.details.push(`Entity type up-to-date: ${et.name}`);
+      result.details.push(`Entity type FAILED (skipped): ${et.name} — ${msg}`);
     }
   }
 

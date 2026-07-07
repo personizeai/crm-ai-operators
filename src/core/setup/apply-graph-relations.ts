@@ -60,9 +60,17 @@ export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRe
       continue;
     }
     if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create graph relation: ${key}`); continue; }
-    await (client as any).context.create({ type: "graph-relation", ...rel });
-    result.created++;
-    result.details.push(`Created graph relation: ${key}`);
+    try {
+      await (client as any).context.create({ type: "graph-relation", ...rel });
+      result.created++;
+      result.details.push(`Created graph relation: ${key}`);
+    } catch (error) {
+      const body = (error as any)?.cause?.response?.data;
+      const msg = body?.error?.message ?? body?.message ?? (error instanceof Error ? error.message : String(error));
+      logger.warn("Failed to apply graph relation — org's Personize API may not support this manifest type yet", { key, error: msg });
+      result.skipped++;
+      result.details.push(`Graph relation FAILED (skipped): ${key} — ${msg}`);
+    }
   }
 
   logger.info("Graph relations applied", { created: result.created, skipped: result.skipped });

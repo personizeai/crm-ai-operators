@@ -51,19 +51,27 @@ export async function applyDocumentTypes(dryRun: boolean): Promise<ApplyDocument
   for (const dt of desired) {
     const existing = existingByName.get(dt.name);
 
-    if (!existing) {
-      if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create document type: ${dt.name}`); continue; }
-      await (client as any).context.create({ type: "document-type", name: dt.name, displayName: dt.displayName, description: dt.description, tags: dt.tags });
-      result.created++;
-      result.details.push(`Created document type: ${dt.name}`);
-    } else if (existing.description !== dt.description) {
-      if (dryRun) { result.updated++; result.details.push(`[DRY RUN] Would update document type: ${dt.name}`); continue; }
-      await (client as any).context.update(existing.id, { displayName: dt.displayName, description: dt.description, tags: dt.tags });
-      result.updated++;
-      result.details.push(`Updated document type: ${dt.name}`);
-    } else {
+    try {
+      if (!existing) {
+        if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create document type: ${dt.name}`); continue; }
+        await (client as any).context.create({ type: "document-type", name: dt.name, displayName: dt.displayName, description: dt.description, tags: dt.tags });
+        result.created++;
+        result.details.push(`Created document type: ${dt.name}`);
+      } else if (existing.description !== dt.description) {
+        if (dryRun) { result.updated++; result.details.push(`[DRY RUN] Would update document type: ${dt.name}`); continue; }
+        await (client as any).context.update(existing.id, { displayName: dt.displayName, description: dt.description, tags: dt.tags });
+        result.updated++;
+        result.details.push(`Updated document type: ${dt.name}`);
+      } else {
+        result.skipped++;
+        result.details.push(`Document type up-to-date: ${dt.name}`);
+      }
+    } catch (error) {
+      const body = (error as any)?.cause?.response?.data;
+      const msg = body?.error?.message ?? body?.message ?? (error instanceof Error ? error.message : String(error));
+      logger.warn("Failed to apply document type — org's Personize API may not support this manifest type yet", { name: dt.name, error: msg });
       result.skipped++;
-      result.details.push(`Document type up-to-date: ${dt.name}`);
+      result.details.push(`Document type FAILED (skipped): ${dt.name} — ${msg}`);
     }
   }
 

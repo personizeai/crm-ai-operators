@@ -155,7 +155,12 @@ async function applyHubspotObject(
       result.created++;
       result.details.push(`hubspot/${objectType}: created ${name}`);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      // The passthrough's error body sometimes nests a structured object under
+      // `.error` (e.g. { code, message }) rather than a string — surface that
+      // directly, since error.message collapses it to "[object Object]".
+      const body = (error as any)?.cause?.response?.data;
+      const msg =
+        body?.error?.message ?? body?.message ?? (error instanceof Error ? error.message : String(error));
       // HubSpot returns 409 PROPERTY_ALREADY_EXISTS when the field is present.
       if (/409|already exists|PROPERTY_ALREADY_EXISTS/i.test(msg)) {
         result.skipped++;

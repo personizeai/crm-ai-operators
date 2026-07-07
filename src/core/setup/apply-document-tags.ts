@@ -49,19 +49,27 @@ export async function applyDocumentTags(dryRun: boolean): Promise<ApplyDocumentT
   for (const tag of desired) {
     const existing = existingByName.get(tag.name);
 
-    if (!existing) {
-      if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create document tag: ${tag.name}`); continue; }
-      await (client as any).context.create({ type: "document-tag", name: tag.name, description: tag.description });
-      result.created++;
-      result.details.push(`Created document tag: ${tag.name}`);
-    } else if (existing.description !== tag.description) {
-      if (dryRun) { result.updated++; result.details.push(`[DRY RUN] Would update document tag: ${tag.name}`); continue; }
-      await (client as any).context.update(existing.id, { description: tag.description });
-      result.updated++;
-      result.details.push(`Updated document tag: ${tag.name}`);
-    } else {
+    try {
+      if (!existing) {
+        if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create document tag: ${tag.name}`); continue; }
+        await (client as any).context.create({ type: "document-tag", name: tag.name, description: tag.description });
+        result.created++;
+        result.details.push(`Created document tag: ${tag.name}`);
+      } else if (existing.description !== tag.description) {
+        if (dryRun) { result.updated++; result.details.push(`[DRY RUN] Would update document tag: ${tag.name}`); continue; }
+        await (client as any).context.update(existing.id, { description: tag.description });
+        result.updated++;
+        result.details.push(`Updated document tag: ${tag.name}`);
+      } else {
+        result.skipped++;
+        result.details.push(`Document tag up-to-date: ${tag.name}`);
+      }
+    } catch (error) {
+      const body = (error as any)?.cause?.response?.data;
+      const msg = body?.error?.message ?? body?.message ?? (error instanceof Error ? error.message : String(error));
+      logger.warn("Failed to apply document tag — org's Personize API may not support this manifest type yet", { name: tag.name, error: msg });
       result.skipped++;
-      result.details.push(`Document tag up-to-date: ${tag.name}`);
+      result.details.push(`Document tag FAILED (skipped): ${tag.name} — ${msg}`);
     }
   }
 
