@@ -35,8 +35,21 @@ async function loadDocumentTypes(): Promise<DocumentType[]> {
 }
 
 interface ExistingDocType {
-  name: string;
+  /** The API keys doc-types by `type_name` (snake_case), not `name`. */
+  type_name: string;
+  label?: string;
   description?: string;
+  /** System built-ins (e.g. "playbook") are listable but not patchable. */
+  is_builtin?: boolean;
+}
+
+/**
+ * The API's `type_name` must be snake_case — kebab-case is rejected as
+ * "Invalid". Manifest names are kebab (e.g. "email-draft"), so derive a valid
+ * snake_case key ("email_draft") for every API call (create/update/list match).
+ */
+function toTypeName(name: string): string {
+  return name.replace(/-/g, "_");
 }
 
 export async function applyDocumentTypes(dryRun: boolean): Promise<ApplyDocumentTypesResult> {
@@ -63,7 +76,7 @@ export async function applyDocumentTypes(dryRun: boolean): Promise<ApplyDocument
   try {
     const res = await ctx.listDocTypes();
     const items: ExistingDocType[] = res?.types ?? [];
-    existingByName = new Map(items.filter((it) => it?.name).map((it) => [it.name, it]));
+    existingByName = new Map(items.filter((it) => it?.type_name).map((it) => [it.type_name, it]));
   } catch (err) {
     const msg = `Failed to list document types: ${(err as Error).message}`;
     logger.warn(msg);
@@ -72,33 +85,41 @@ export async function applyDocumentTypes(dryRun: boolean): Promise<ApplyDocument
   }
 
   for (const dt of desired) {
-    const existing = existingByName.get(dt.name);
+    // Wire contract (verified live): snake_case `type_name` + required `label`.
+    // `description` is stored; the manifest's `tags` are not modeled by this
+    // endpoint (doc-types carry no tags), so they're intentionally not sent.
+    const typeName = toTypeName(dt.name);
+    const existing = existingByName.get(typeName);
 
     try {
       if (!existing) {
         if (dryRun) {
           result.created++;
-          result.details.push(`[DRY RUN] Would create document type: ${dt.name}`);
+          result.details.push(`[DRY RUN] Would create document type: ${typeName}`);
           continue;
         }
-        await ctx.createDocType({ name: dt.name, displayName: dt.displayName, description: dt.description, tags: dt.tags });
+        await ctx.createDocType({ type_name: typeName, label: dt.displayName, description: dt.description });
         result.created++;
-        result.details.push(`Created document type: ${dt.name}`);
-      } else if (existing.description !== dt.description) {
+        result.details.push(`Created document type: ${typeName}`);
+      } else if (existing.is_builtin) {
+        // System built-in (e.g. "playbook"): listable but PATCH 404s. Leave it.
+        result.skipped++;
+        result.details.push(`Document type is a system built-in; leaving as-is: ${typeName}`);
+      } else if (existing.description !== dt.description || existing.label !== dt.displayName) {
         if (dryRun) {
           result.updated++;
-          result.details.push(`[DRY RUN] Would update document type: ${dt.name}`);
+          result.details.push(`[DRY RUN] Would update document type: ${typeName}`);
           continue;
         }
-        await ctx.updateDocType(dt.name, { displayName: dt.displayName, description: dt.description, tags: dt.tags });
+        await ctx.updateDocType(typeName, { label: dt.displayName, description: dt.description });
         result.updated++;
-        result.details.push(`Updated document type: ${dt.name}`);
+        result.details.push(`Updated document type: ${typeName}`);
       } else {
         result.skipped++;
-        result.details.push(`Document type up-to-date: ${dt.name}`);
+        result.details.push(`Document type up-to-date: ${typeName}`);
       }
     } catch (err) {
-      const msg = `Failed to apply document type "${dt.name}": ${(err as Error).message}`;
+      const msg = `Failed to apply document type "${typeName}": ${(err as Error).message}`;
       logger.warn(msg);
       result.warnings.push(msg);
     }
