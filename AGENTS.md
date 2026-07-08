@@ -93,6 +93,37 @@ If the user genuinely wants the generic starter templates (e.g. a quick kick-the
 tires run), that's allowed — but say so explicitly and note that scoring/outreach
 quality will be generic until the overlay is filled.
 
+## Syncing a custom entity (deal / ticket / custom object) — ask for its identifier
+
+Standard entities (contact, company) need nothing from you: Personize auto-maps
+their fields and keys them on email / website. **Custom entities have no such
+default key** — before syncing one you MUST ask the user which field uniquely
+identifies each record, because Personize keys the imported records by it and all
+downstream retrieve/writeback address them by the same key.
+
+Custom entities are manifest-driven (`crm-custom-entities.ts` discovers any
+collection manifest with a `crmSync` block where `standard !== true`).
+[`manifests/core/collections/deals.json`](manifests/core/collections/deals.json)
+is the reference: it declares `crmSync.identity = { keyName, crmFields }`. Adding a
+new custom entity is a manifest drop — no code.
+
+On a request to sync a non-standard entity:
+
+1. **Ask for the identifier.** "What uniquely identifies a `<entity>` in your CRM?"
+   (e.g. a deal's name → HubSpot `dealname`, a ticket's subject → `subject`). If a
+   shipped manifest already declares a sensible default, confirm it rather than
+   re-ask.
+2. **Record it as an overlay, never edit core.** Write
+   `manifests/local/collections/<entity>.json` with the `crmSync.identity` set to
+   the user's answer (`keyName` = a mapped property systemName; `crmFields.<crm>` =
+   the native field) plus the property `crmFields` you want imported.
+   `manifests/local/` wins per-file, so a later `setup` never resets it.
+3. **Dry-run to validate, then sync.** `crm.sync-core` dry-run validates the
+   custom entity's manifest locally (mapping count, identity key mapped, source
+   field present) — a misconfig surfaces here, not mid-run. Then sync live with
+   `objects: ["<entityType>"]`; custom entities are opt-in and never sync by
+   default.
+
 ## After the first `setup.apply` — show the setup as a diagram
 
 The first time setup provisions an org (collections created, guidelines applied,

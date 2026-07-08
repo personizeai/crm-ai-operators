@@ -14,7 +14,11 @@ import path from "node:path";
 // now a one-line manifest edit — no code change.
 // -----------------------------------------------------------------------------
 
-const MANIFEST_DIR = path.join(process.cwd(), "manifests", "core", "collections");
+const CORE_DIR = path.join(process.cwd(), "manifests", "core", "collections");
+/** Git-ignored org overlay; a same-named file here wins over core (mirrors apply-manifests). */
+const LOCAL_DIR = path.join(process.cwd(), "manifests", "local", "collections");
+/** Collection dirs in precedence order (local overlay first). */
+export const COLLECTION_DIRS = [LOCAL_DIR, CORE_DIR];
 
 export type PropertyType = "text" | "number" | "boolean" | "date" | "options" | "array";
 
@@ -66,11 +70,16 @@ export interface CustomEntitySync {
 
 const cache = new Map<string, CollectionManifest>();
 
-/** Load and cache a collection manifest by slug (e.g. "contacts", "companies"). */
+/** Load and cache a collection manifest by slug (e.g. "contacts", "companies"). Local overlay wins. */
 export async function loadCollectionManifest(slug: string): Promise<CollectionManifest> {
   const cached = cache.get(slug);
   if (cached) return cached;
-  const raw = await readFile(path.join(MANIFEST_DIR, `${slug}.json`), "utf8");
+  let raw: string | undefined;
+  for (const dir of COLLECTION_DIRS) {
+    raw = await readFile(path.join(dir, `${slug}.json`), "utf8").catch(() => undefined);
+    if (raw !== undefined) break;
+  }
+  if (raw === undefined) throw new Error(`collection manifest not found: ${slug}.json`);
   const manifest = JSON.parse(raw) as CollectionManifest;
   cache.set(slug, manifest);
   return manifest;
