@@ -4,13 +4,15 @@ import {
   runSync,
   runFailed,
   validateSync,
+  type EnsureDatasourceOptions,
   type MappingMode,
   type SyncEntityType,
   type SyncProvider,
   type SyncRunResult,
   type SyncValidation,
 } from "../../../adapters/personize-sync.js";
-import { backfillCrmRecordIds, type BackfillResult } from "../../lib/crm-record-id-backfill.js";
+import { customEntitiesByType, type CustomEntity } from "../../lib/crm-custom-entities.js";
+import { buildCustomEntitySync } from "../../lib/crm-field-map.js";
 import type { OperationEntry } from "../types.js";
 
 // Default objects to import per provider. Salesforce companies (Account) ship a
@@ -25,9 +27,17 @@ const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
 // resolved via AI (suggestMappings → manual datasource).
 const PROVIDERS_WITHOUT_TEMPLATES = new Set(["apollo", "apollo-oauth"]);
 
-function resolveObjects(provider: SyncProvider, requested?: unknown): SyncEntityType[] {
+/**
+ * Resolve the objects to sync. Standard entities (contact/company) plus any
+ * registered custom entity (deal/ticket/… — discovered from manifests) are valid;
+ * unknown requests are dropped. Defaults to the provider's standard objects.
+ */
+function resolveObjects(provider: SyncProvider, requested: unknown, validCustom: Set<string>): SyncEntityType[] {
   if (Array.isArray(requested) && requested.length > 0) {
-    return requested.filter((o): o is SyncEntityType => o === "contact" || o === "company" || o === "deal");
+    return requested.filter(
+      (o): o is SyncEntityType =>
+        o === "contact" || o === "company" || (typeof o === "string" && validCustom.has(o)),
+    );
   }
   return DEFAULT_OBJECTS[provider] ?? ["contact"];
 }
@@ -83,16 +93,48 @@ export const crmSyncCore: OperationEntry = {
       mappingMode?: unknown;
     };
     const provider = (inputObj.provider ?? inputObj.crm ?? context.crm ?? "hubspot") as SyncProvider;
-    const objects = resolveObjects(provider, inputObj.objects);
+    // Custom entities (deal/ticket/…) are discovered from manifests; standard
+    // entities (contact/company) are always valid. Personize auto-maps standard;
+    // custom entities carry manifest-derived mappings + a custom identity key.
+    const customByType = await customEntitiesByType();
+    const objects = resolveObjects(provider, inputObj.objects, new Set(customByType.keys()));
     const maxRecords = resolveMaxRecords(inputObj.max_records ?? inputObj.maxRecords);
     const mappingMode = resolveMappingMode(inputObj.mapping_mode ?? inputObj.mappingMode, provider);
     const capNote = maxRecords != null ? ` (max ${maxRecords})` : "";
 
     if (context.dryRun) {
-      // Validate each object against Personize (run dryRun:true) — no writes.
+      // Validate each object — no writes. Standard entities validate against
+      // Personize; custom entities validate their manifest-derived manual mapping
+      // locally (so a misconfigured custom entity is caught before a live run).
       const validations: SyncValidation[] = [];
       for (const entityType of objects) {
-        validations.push(await validateSync(provider, entityType, "in"));
+        const custom = customByType.get(entityType);
+        if (!custom) {
+          validations.push(await validateSync(provider, entityType, "in"));
+          continue;
+        }
+        try {
+          const { propertyMappings, identityFields } = buildCustomEntitySync(custom.manifest, provider);
+          validations.push({
+            ok: true,
+            provider,
+            entityType,
+            direction: "in",
+            willCreateDatasource: true,
+            mappingMode: "manual",
+            propertyMappingsCount: propertyMappings.length,
+            note: `Custom entity — would create a manual datasource with ${propertyMappings.length} field mapping(s), keyed on "${identityFields.customKeyName}" (${provider}.${identityFields.customKeySource}).`,
+          });
+        } catch (error) {
+          validations.push({
+            ok: false,
+            provider,
+            entityType,
+            direction: "in",
+            willCreateDatasource: false,
+            note: `Custom entity misconfigured: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
       }
       const allValid = validations.every((v) => v.ok);
       const detail = validations.map((v) => `${v.entityType}: ${v.note}`).join(" | ");
@@ -115,7 +157,13 @@ export const crmSyncCore: OperationEntry = {
 
     try {
       for (const entityType of objects) {
-        const ds = await ensureDatasource(provider, entityType, { maxRecords, mappingMode });
+        const custom: CustomEntity | undefined = customByType.get(entityType);
+        // Standard entity → let Personize auto-map. Custom entity → manual create
+        // with manifest-derived propertyMappings + a custom identity key.
+        const ensureOpts: EnsureDatasourceOptions = custom
+          ? { maxRecords, ...buildCustomEntitySync(custom.manifest, provider) }
+          : { maxRecords, mappingMode };
+        const ds = await ensureDatasource(provider, entityType, ensureOpts);
         const result = await runSync(ds.id, "in");
         perObject[entityType] = result;
         totalRecords += result.recordCount ?? 0;
@@ -138,24 +186,12 @@ export const crmSyncCore: OperationEntry = {
       };
     }
 
-    // The managed template maps business fields but not the CRM's native object
-    // id, which downstream writeback needs (see crm-record-id-backfill). Pull each
-    // object's id and set crm_record_id on the matching Personize record. hubspot-
-    // only, best-effort, and idempotent — a no-op for records already carrying an
-    // id, so it's safe to re-run after an async sync finishes landing records.
-    const backfills: BackfillResult[] = [];
-    if (provider === "hubspot") {
-      for (const entityType of objects) {
-        backfills.push(await backfillCrmRecordIds(provider, entityType, { maxRecords }));
-      }
-    }
-    const backfilled = backfills.reduce((sum, b) => sum + b.updated, 0);
-
+    // crm_record_id is populated by Personize's managed sync (hs_object_id →
+    // crm_record_id, in every template and manual mode). No client-side backfill.
     const dispatchedOnly = Object.values(perObject).every((r) => !r.eventId);
-    const backfillNote = backfilled > 0 ? ` Backfilled crm_record_id on ${backfilled} record(s).` : "";
     const summary = dispatchedOnly
-      ? `Dispatched Personize-managed sync-in for ${provider} ${objects.join(", ")}. Runs are async — check status in the Personize dashboard or via events.${backfillNote}`
-      : `Synced ${totalSuccess}/${totalRecords} ${provider} records (${objects.join(", ")}) into Personize via managed sync-in.${backfillNote}`;
+      ? `Dispatched Personize-managed sync-in for ${provider} ${objects.join(", ")}. Runs are async — check status in the Personize dashboard or via events.`
+      : `Synced ${totalSuccess}/${totalRecords} ${provider} records (${objects.join(", ")}) into Personize via managed sync-in.`;
 
     return {
       ok: !anyFailedRun,
@@ -173,7 +209,6 @@ export const crmSyncCore: OperationEntry = {
         records_updated: totalSuccess,
         records_failed: totalFailed,
         per_object: perObject,
-        crm_record_id_backfill: backfills,
       },
     };
   },

@@ -1,11 +1,14 @@
 import { logger } from "../../lib/logger.js";
 import {
   setSyncSchedule,
+  type EnsureDatasourceOptions,
   type ScheduleFrequency,
   type SyncEntityType,
   type SyncProvider,
   type SyncSchedule,
 } from "../../../adapters/personize-sync.js";
+import { customEntitiesByType, type CustomEntity } from "../../lib/crm-custom-entities.js";
+import { buildCustomEntitySync } from "../../lib/crm-field-map.js";
 import type { OperationEntry } from "../types.js";
 
 const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
@@ -16,9 +19,12 @@ const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
 
 const FREQUENCIES = new Set<ScheduleFrequency>(["hourly", "daily", "weekly", "manual-only"]);
 
-function resolveObjects(provider: SyncProvider, requested?: unknown): SyncEntityType[] {
+function resolveObjects(provider: SyncProvider, requested: unknown, validCustom: Set<string>): SyncEntityType[] {
   if (Array.isArray(requested) && requested.length > 0) {
-    return requested.filter((o): o is SyncEntityType => o === "contact" || o === "company" || o === "deal");
+    return requested.filter(
+      (o): o is SyncEntityType =>
+        o === "contact" || o === "company" || (typeof o === "string" && validCustom.has(o)),
+    );
   }
   return DEFAULT_OBJECTS[provider] ?? ["contact"];
 }
@@ -60,7 +66,8 @@ export const crmSyncSchedule: OperationEntry = {
       frequency?: unknown;
     };
     const provider = (inputObj.provider ?? inputObj.crm ?? context.crm ?? "hubspot") as SyncProvider;
-    const objects = resolveObjects(provider, inputObj.objects);
+    const customByType = await customEntitiesByType();
+    const objects = resolveObjects(provider, inputObj.objects, new Set(customByType.keys()));
     const frequency = resolveFrequency(inputObj.frequency);
     // Explicit enabled:false, or frequency 'manual-only', disables the cron.
     const enabled = inputObj.enabled === false ? false : frequency !== "manual-only";
@@ -81,7 +88,13 @@ export const crmSyncSchedule: OperationEntry = {
     const perObject: Record<string, SyncSchedule> = {};
     try {
       for (const entityType of objects) {
-        const schedule = await setSyncSchedule(provider, entityType, { enabled, frequency });
+        const custom: CustomEntity | undefined = customByType.get(entityType);
+        // Scheduling ensures the datasource exists first; pass the custom entity's
+        // manifest config so that create is a correct manual one.
+        const ensureOpts: EnsureDatasourceOptions | undefined = custom
+          ? buildCustomEntitySync(custom.manifest, provider)
+          : undefined;
+        const schedule = await setSyncSchedule(provider, entityType, { enabled, frequency }, ensureOpts);
         perObject[entityType] = schedule;
         logger.info("crm.sync-schedule: schedule set", { provider, entityType, ...schedule });
       }

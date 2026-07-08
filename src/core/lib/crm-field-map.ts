@@ -14,7 +14,11 @@ import path from "node:path";
 // now a one-line manifest edit — no code change.
 // -----------------------------------------------------------------------------
 
-const MANIFEST_DIR = path.join(process.cwd(), "manifests", "core", "collections");
+const CORE_DIR = path.join(process.cwd(), "manifests", "core", "collections");
+/** Git-ignored org overlay; a same-named file here wins over core (mirrors apply-manifests). */
+const LOCAL_DIR = path.join(process.cwd(), "manifests", "local", "collections");
+/** Collection dirs in precedence order (local overlay first). */
+export const COLLECTION_DIRS = [LOCAL_DIR, CORE_DIR];
 
 export type PropertyType = "text" | "number" | "boolean" | "date" | "options" | "array";
 
@@ -25,19 +29,57 @@ export interface ManifestProperty {
   crmAssociation?: Record<string, string>;
 }
 
+/** Identity key for a custom-sync entity: the Personize key + its per-CRM source field. */
+export interface CrmEntityIdentity {
+  /** Personize custom key name — must match a property systemName mapped from `crmFields[crm]`. */
+  keyName: string;
+  /** Per-CRM source field that supplies the key value (e.g. { hubspot: "dealname" }). */
+  crmFields: Record<string, string>;
+}
+
+/**
+ * How a collection participates in `crm.sync-core`. Absent for collections that
+ * aren't CRM-synced. Standard entities (contact/company) either omit this or set
+ * `standard: true` — Personize auto-maps and auto-resolves their identity. Custom
+ * entities (deal/ticket/custom objects) set `standard: false` and declare an
+ * `identity`, so sync creates a manual datasource with mappings + a custom key.
+ */
+export interface CrmSyncConfig {
+  /** Datasource entity type, e.g. "deal". */
+  entityType: string;
+  /** true = Personize-auto-mapped standard entity; false/absent = custom (manual) entity. */
+  standard?: boolean;
+  /** Per-CRM native object segment, e.g. { hubspot: "deals" } — used for writeback/reference. */
+  crmObject?: Record<string, string>;
+  /** Required for custom entities: the record-identity key. */
+  identity?: CrmEntityIdentity;
+}
+
 export interface CollectionManifest {
   slug: string;
   primaryKeyField: string;
   properties: ManifestProperty[];
+  crmSync?: CrmSyncConfig;
+}
+
+/** The manual-datasource inputs derived from a custom entity's manifest for one CRM. */
+export interface CustomEntitySync {
+  propertyMappings: Array<{ source: string; target: string; direction: "in" }>;
+  identityFields: { customKeyName: string; customKeySource: string };
 }
 
 const cache = new Map<string, CollectionManifest>();
 
-/** Load and cache a collection manifest by slug (e.g. "contacts", "companies"). */
+/** Load and cache a collection manifest by slug (e.g. "contacts", "companies"). Local overlay wins. */
 export async function loadCollectionManifest(slug: string): Promise<CollectionManifest> {
   const cached = cache.get(slug);
   if (cached) return cached;
-  const raw = await readFile(path.join(MANIFEST_DIR, `${slug}.json`), "utf8");
+  let raw: string | undefined;
+  for (const dir of COLLECTION_DIRS) {
+    raw = await readFile(path.join(dir, `${slug}.json`), "utf8").catch(() => undefined);
+    if (raw !== undefined) break;
+  }
+  if (raw === undefined) throw new Error(`collection manifest not found: ${slug}.json`);
   const manifest = JSON.parse(raw) as CollectionManifest;
   cache.set(slug, manifest);
   return manifest;
@@ -101,4 +143,45 @@ export function mapCrmProperties(
     if (value !== undefined) out[p.systemName] = value;
   }
   return out;
+}
+
+/**
+ * Build the manual-datasource inputs for a custom-sync entity from its manifest,
+ * for one CRM: `propertyMappings` from each property's `crmFields[crm]`, and
+ * `identityFields` (customKeyName/customKeySource) from the `crmSync.identity`
+ * block. Throws with an actionable message if the manifest can't support sync for
+ * this CRM (not a custom entity, missing identity, or no mapped fields).
+ */
+export function buildCustomEntitySync(manifest: CollectionManifest, crm: string): CustomEntitySync {
+  const cfg = manifest.crmSync;
+  if (!cfg || cfg.standard === true) {
+    throw new Error(`Collection "${manifest.slug}" is not a custom-sync entity (no crmSync, or standard).`);
+  }
+  if (!cfg.identity) {
+    throw new Error(`Collection "${manifest.slug}" crmSync.identity is required for a custom entity.`);
+  }
+  const customKeySource = cfg.identity.crmFields[crm];
+  if (!customKeySource) {
+    throw new Error(`Collection "${manifest.slug}" has no ${crm} identity source field (crmSync.identity.crmFields.${crm}).`);
+  }
+
+  const propertyMappings: CustomEntitySync["propertyMappings"] = [];
+  for (const p of manifest.properties) {
+    const field = p.crmFields?.[crm];
+    if (field) propertyMappings.push({ source: field, target: p.systemName, direction: "in" });
+  }
+  if (propertyMappings.length === 0) {
+    throw new Error(`Collection "${manifest.slug}" has no ${crm} property mappings (property crmFields.${crm}).`);
+  }
+  // The identity key must itself be one of the mapped targets, or Personize can't populate it.
+  if (!propertyMappings.some((m) => m.target === cfg.identity!.keyName)) {
+    throw new Error(
+      `Collection "${manifest.slug}" identity keyName "${cfg.identity.keyName}" is not a ${crm}-mapped property.`,
+    );
+  }
+
+  return {
+    propertyMappings,
+    identityFields: { customKeyName: cfg.identity.keyName, customKeySource },
+  };
 }
