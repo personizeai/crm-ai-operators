@@ -4,11 +4,14 @@ import {
   runSync,
   runFailed,
   validateSync,
+  type EnsureDatasourceOptions,
   type SyncEntityType,
   type SyncProvider,
   type SyncRunResult,
   type SyncValidation,
 } from "../../../adapters/personize-sync.js";
+import { customEntitiesByType, type CustomEntity } from "../../lib/crm-custom-entities.js";
+import { buildCustomEntitySync } from "../../lib/crm-field-map.js";
 import type { OperationEntry } from "../types.js";
 
 // Which objects to write back by default. Same default set as sync-in.
@@ -17,9 +20,12 @@ const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
   salesforce: ["contact"],
 };
 
-function resolveObjects(provider: SyncProvider, requested?: unknown): SyncEntityType[] {
+function resolveObjects(provider: SyncProvider, requested: unknown, validCustom: Set<string>): SyncEntityType[] {
   if (Array.isArray(requested) && requested.length > 0) {
-    return requested.filter((o): o is SyncEntityType => o === "contact" || o === "company" || o === "deal");
+    return requested.filter(
+      (o): o is SyncEntityType =>
+        o === "contact" || o === "company" || (typeof o === "string" && validCustom.has(o)),
+    );
   }
   return DEFAULT_OBJECTS[provider] ?? ["contact"];
 }
@@ -49,13 +55,41 @@ export const crmSyncOut: OperationEntry = {
   run: async (input, context) => {
     const inputObj = (input ?? {}) as { crm?: string; provider?: string; objects?: unknown };
     const provider = (inputObj.provider ?? inputObj.crm ?? context.crm ?? "hubspot") as SyncProvider;
-    const objects = resolveObjects(provider, inputObj.objects);
+    const customByType = await customEntitiesByType();
+    const objects = resolveObjects(provider, inputObj.objects, new Set(customByType.keys()));
 
     if (context.dryRun) {
-      // Validate each object against Personize (run dryRun:true) — no writes.
+      // Validate each object — no writes. Custom entities validate their manifest
+      // locally; standard entities validate against Personize.
       const validations: SyncValidation[] = [];
       for (const entityType of objects) {
-        validations.push(await validateSync(provider, entityType, "out"));
+        const custom = customByType.get(entityType);
+        if (!custom) {
+          validations.push(await validateSync(provider, entityType, "out"));
+          continue;
+        }
+        try {
+          const { propertyMappings, identityFields } = buildCustomEntitySync(custom.manifest, provider);
+          validations.push({
+            ok: true,
+            provider,
+            entityType,
+            direction: "out",
+            willCreateDatasource: true,
+            mappingMode: "manual",
+            propertyMappingsCount: propertyMappings.length,
+            note: `Custom entity — writeback via a manual datasource keyed on "${identityFields.customKeyName}".`,
+          });
+        } catch (error) {
+          validations.push({
+            ok: false,
+            provider,
+            entityType,
+            direction: "out",
+            willCreateDatasource: false,
+            note: `Custom entity misconfigured: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
       }
       const allValid = validations.every((v) => v.ok);
       const detail = validations.map((v) => `${v.entityType}: ${v.note}`).join(" | ");
@@ -78,7 +112,14 @@ export const crmSyncOut: OperationEntry = {
 
     try {
       for (const entityType of objects) {
-        const ds = await ensureDatasource(provider, entityType);
+        const custom: CustomEntity | undefined = customByType.get(entityType);
+        // Pass the custom entity's manifest config so a fresh datasource create
+        // is a correct manual one (not a non-existent template). Standard entities
+        // need no options — Personize auto-maps them.
+        const ensureOpts: EnsureDatasourceOptions | undefined = custom
+          ? buildCustomEntitySync(custom.manifest, provider)
+          : undefined;
+        const ds = await ensureDatasource(provider, entityType, ensureOpts);
         const result = await runSync(ds.id, "out");
         perObject[entityType] = result;
         totalRecords += result.recordCount ?? 0;

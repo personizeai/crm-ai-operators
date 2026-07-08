@@ -67,6 +67,23 @@ const CollectionPropertySchema = z.object({
   crmAssociation: z.record(z.string()).optional(),
 });
 
+/**
+ * Opt-in CRM-sync config for a collection (see crm-custom-entities). Standard
+ * entities omit it or set `standard: true`; custom entities declare an `identity`
+ * so crm.sync-core builds a manual datasource keyed on a custom field.
+ */
+const CrmSyncConfigSchema = z.object({
+  entityType: z.string(),
+  standard: z.boolean().optional(),
+  crmObject: z.record(z.string()).optional(),
+  identity: z
+    .object({
+      keyName: z.string(),
+      crmFields: z.record(z.string()),
+    })
+    .optional(),
+});
+
 const CollectionManifestSchema = z.object({
   name: z.string(),
   slug: z.string().regex(/^[a-z][a-z0-9-]*$/, "slug must be lowercase-kebab-case"),
@@ -75,6 +92,7 @@ const CollectionManifestSchema = z.object({
   color: z.string().optional(),
   primaryKeyField: z.string(),
   properties: z.array(CollectionPropertySchema),
+  crmSync: CrmSyncConfigSchema.optional(),
 });
 
 const GuidelineFrontmatterSchema = z.object({
