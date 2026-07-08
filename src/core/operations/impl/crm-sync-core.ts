@@ -11,7 +11,6 @@ import {
   type SyncRunResult,
   type SyncValidation,
 } from "../../../adapters/personize-sync.js";
-import { backfillCrmRecordIds, type BackfillResult } from "../../lib/crm-record-id-backfill.js";
 import { customEntitiesByType, type CustomEntity } from "../../lib/crm-custom-entities.js";
 import { buildCustomEntitySync } from "../../lib/crm-field-map.js";
 import type { OperationEntry } from "../types.js";
@@ -187,24 +186,12 @@ export const crmSyncCore: OperationEntry = {
       };
     }
 
-    // The managed template maps business fields but not the CRM's native object
-    // id, which downstream writeback needs (see crm-record-id-backfill). Pull each
-    // object's id and set crm_record_id on the matching Personize record. hubspot-
-    // only, best-effort, and idempotent — a no-op for records already carrying an
-    // id, so it's safe to re-run after an async sync finishes landing records.
-    const backfills: BackfillResult[] = [];
-    if (provider === "hubspot") {
-      for (const entityType of objects) {
-        backfills.push(await backfillCrmRecordIds(provider, entityType, { maxRecords }));
-      }
-    }
-    const backfilled = backfills.reduce((sum, b) => sum + b.updated, 0);
-
+    // crm_record_id is populated by Personize's managed sync (hs_object_id →
+    // crm_record_id, in every template and manual mode). No client-side backfill.
     const dispatchedOnly = Object.values(perObject).every((r) => !r.eventId);
-    const backfillNote = backfilled > 0 ? ` Backfilled crm_record_id on ${backfilled} record(s).` : "";
     const summary = dispatchedOnly
-      ? `Dispatched Personize-managed sync-in for ${provider} ${objects.join(", ")}. Runs are async — check status in the Personize dashboard or via events.${backfillNote}`
-      : `Synced ${totalSuccess}/${totalRecords} ${provider} records (${objects.join(", ")}) into Personize via managed sync-in.${backfillNote}`;
+      ? `Dispatched Personize-managed sync-in for ${provider} ${objects.join(", ")}. Runs are async — check status in the Personize dashboard or via events.`
+      : `Synced ${totalSuccess}/${totalRecords} ${provider} records (${objects.join(", ")}) into Personize via managed sync-in.`;
 
     return {
       ok: !anyFailedRun,
@@ -222,7 +209,6 @@ export const crmSyncCore: OperationEntry = {
         records_updated: totalSuccess,
         records_failed: totalFailed,
         per_object: perObject,
-        crm_record_id_backfill: backfills,
       },
     };
   },

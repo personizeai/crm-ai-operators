@@ -102,22 +102,22 @@ identifies each record, because Personize keys the imported records by it and al
 downstream retrieve/writeback address them by the same key.
 
 Custom entities are manifest-driven (`crm-custom-entities.ts` discovers any
-collection manifest with a `crmSync` block where `standard !== true`).
-[`manifests/core/collections/deals.json`](manifests/core/collections/deals.json)
-is the reference: it declares `crmSync.identity = { keyName, crmFields }`. Adding a
-new custom entity is a manifest drop — no code.
+collection manifest with a `crmSync` block where `standard !== true`). **No custom
+entity ships by default** — you author one per org.
+[`manifests/examples/collections/deals.json`](manifests/examples/collections/deals.json)
+is a copy-paste template: it declares `crmSync.identity = { keyName, crmFields }`.
+Adding a custom entity is a manifest drop — no code.
 
 On a request to sync a non-standard entity:
 
 1. **Ask for the identifier.** "What uniquely identifies a `<entity>` in your CRM?"
-   (e.g. a deal's name → HubSpot `dealname`, a ticket's subject → `subject`). If a
-   shipped manifest already declares a sensible default, confirm it rather than
-   re-ask.
-2. **Record it as an overlay, never edit core.** Write
-   `manifests/local/collections/<entity>.json` with the `crmSync.identity` set to
-   the user's answer (`keyName` = a mapped property systemName; `crmFields.<crm>` =
-   the native field) plus the property `crmFields` you want imported.
-   `manifests/local/` wins per-file, so a later `setup` never resets it.
+   (e.g. a deal's name → HubSpot `dealname`, a ticket's subject → `subject`).
+2. **Record it as an overlay, never edit core.** Copy the closest example (or
+   write fresh) to `manifests/local/collections/<entity>.json`, setting
+   `crmSync.identity` to the user's answer (`keyName` = a mapped property
+   systemName; `crmFields.<crm>` = the native field) plus the property `crmFields`
+   you want imported. `manifests/local/` wins per-file and is git-ignored, so a
+   later `setup` never resets it and it never ships to other orgs.
 3. **Dry-run to validate, then sync.** `crm.sync-core` dry-run validates the
    custom entity's manifest locally (mapping count, identity key mapped, source
    field present) — a misconfig surfaces here, not mid-run. Then sync live with
