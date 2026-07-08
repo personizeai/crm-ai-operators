@@ -57,6 +57,22 @@ export interface SyncRunResult {
   error?: string;
 }
 
+/**
+ * Identity keys the managed sync uses to match/dedupe imported records.
+ *
+ * email/website cover the standard entities (contact/company) and are auto-
+ * resolved by Personize when omitted. `customKeyName` (Personize key) +
+ * `customKeySource` (CRM field) identify non-standard entities (deal, ticket,
+ * custom objects) — they must be set together or the API 400s. The typed shape
+ * lands in a future SDK release; until then it's passed through at runtime.
+ */
+export interface DatasourceIdentityFields {
+  email?: string;
+  website?: string;
+  customKeyName?: string;
+  customKeySource?: string;
+}
+
 interface DatasourceCreatePayload {
   name: string;
   provider: SyncProvider;
@@ -65,6 +81,8 @@ interface DatasourceCreatePayload {
   template?: { type: "builtin" | "custom"; id: string };
   /** mode='manual' — explicit field mappings (e.g. from suggestMappings). */
   propertyMappings?: unknown[];
+  /** Record-identity keys; omit for contacts/companies (Personize auto-resolves email/website). */
+  identityFields?: DatasourceIdentityFields;
   /** Cap the number of records imported in a run (bounded / test syncs). */
   maxRecords?: number;
   /** Datasource default direction; set only for manual-mode creates. */
@@ -99,13 +117,22 @@ interface RunEnvelope {
   dryRun?: boolean;
 }
 
+/** Partial-update payload for a datasource (subset of the SDK's PatchDataSourceOptions we use). */
+interface PatchDatasourcePayload {
+  maxRecords?: number;
+  propertyMappings?: unknown[];
+  identityFields?: DatasourceIdentityFields;
+}
+
 interface DatasourcesApi {
   create(payload: DatasourceCreatePayload): Promise<{ data: DatasourceRecord }>;
   run(id: string, payload: { direction: SyncDirection; dryRun?: boolean }): Promise<RunEnvelope>;
   getRun(id: string, eventId: string): Promise<{ data: SyncRunResult[] }>;
   list(): Promise<{ data: DatasourceRecord[] }>;
-  /** PATCH a datasource. Optional — older SDKs may lack it; callers must guard. */
-  update?(id: string, payload: { maxRecords?: number }): Promise<{ data?: DatasourceRecord }>;
+  /** PATCH /integrations/datasources/:id — partial update. Optional; guard before calling. */
+  patch?(id: string, payload: PatchDatasourcePayload): Promise<{ data?: DatasourceRecord }>;
+  /** DELETE /integrations/datasources/:id — remove the config (does not revoke the CRM connection). Optional; guard. */
+  delete?(id: string): Promise<unknown>;
   /** PUT the recurring schedule. Optional — guard before calling. */
   setSchedule?(id: string, options: { enabled: boolean; frequency?: ScheduleFrequency }): Promise<{ data?: SyncSchedule }>;
   /** GET the schedule view. Optional — guard before calling. */
@@ -187,6 +214,24 @@ export interface EnsureDatasourceOptions {
    * - `auto`: try the template, fall back to AI mappings when no builtin template exists.
    */
   mappingMode?: MappingMode;
+  /**
+   * Record-identity keys, applied on create. Omit for contacts/companies —
+   * Personize auto-resolves email/website. Supply `customKeyName`+`customKeySource`
+   * for non-standard entities (deal/ticket/custom) that email/website can't identify.
+   */
+  identityFields?: DatasourceIdentityFields;
+}
+
+/** Guard the custom-key pairing before it reaches the API (which 400s on a lone field). */
+function assertValidIdentityFields(identityFields?: DatasourceIdentityFields): void {
+  if (!identityFields) return;
+  const hasName = !!identityFields.customKeyName;
+  const hasSource = !!identityFields.customKeySource;
+  if (hasName !== hasSource) {
+    throw new Error(
+      "identityFields.customKeyName and customKeySource must be set together (or both omitted).",
+    );
+  }
 }
 
 function isTemplateNotFound(error: unknown): boolean {
@@ -211,8 +256,10 @@ async function createDatasource(
   name: string,
   mappingMode: MappingMode,
   maxRecords?: number,
+  identityFields?: DatasourceIdentityFields,
 ): Promise<DatasourceRecord> {
   const cap = maxRecords != null ? { maxRecords } : {};
+  const identity = identityFields ? { identityFields } : {};
 
   const createFromAi = async (): Promise<DatasourceRecord> => {
     const suggestion = await api.suggestMappings({ provider, entityType, mode: "ai" });
@@ -229,6 +276,7 @@ async function createDatasource(
       mode: "manual",
       propertyMappings,
       direction: "in",
+      ...identity,
       ...cap,
     });
     return created.data;
@@ -243,6 +291,7 @@ async function createDatasource(
       entityType,
       mode: "template",
       template: { type: "builtin", id: builtinTemplateId(provider, entityType) },
+      ...identity,
       ...cap,
     });
     return created.data;
@@ -299,13 +348,14 @@ export async function ensureDatasource(
   options: EnsureDatasourceOptions = {},
 ): Promise<DatasourceRecord> {
   const api = integrationsApi();
-  const { maxRecords, mappingMode = "template" } = options;
+  const { maxRecords, mappingMode = "template", identityFields } = options;
+  assertValidIdentityFields(identityFields);
 
   const match = matchDatasource(await listDatasources(api), provider, entityType);
   if (match) {
     // Re-apply the cap on reuse so a bounded run can't inherit an unbounded config.
-    if (maxRecords != null && typeof api.datasources.update === "function") {
-      await api.datasources.update(match.id, { maxRecords }).catch((error) => {
+    if (maxRecords != null && typeof api.datasources.patch === "function") {
+      await api.datasources.patch(match.id, { maxRecords }).catch((error) => {
         logger.warn("personize-sync: could not patch maxRecords on existing datasource", {
           provider,
           entityType,
@@ -324,6 +374,7 @@ export async function ensureDatasource(
     datasourceName(provider, entityType),
     mappingMode,
     maxRecords,
+    identityFields,
   );
   logger.info("personize-sync: created datasource", { provider, entityType, id: created.id, mappingMode });
   return created;
