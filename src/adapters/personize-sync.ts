@@ -23,7 +23,8 @@ import type { CrmId } from "../core/operations/types.js";
  */
 
 export type SyncProvider = Extract<CrmId, "hubspot" | "salesforce"> | (string & {});
-export type SyncEntityType = "contact" | "company" | "deal";
+/** Standard entities are known literals; custom entities (deal/ticket/…) are arbitrary strings. */
+export type SyncEntityType = "contact" | "company" | "deal" | (string & {});
 export type SyncDirection = "in" | "out" | "both";
 
 /** Terminal + in-flight states a managed run can report. Normalized lowercase. */
@@ -182,11 +183,16 @@ function eventsApi(): EventsApi | undefined {
   return api && typeof api.list === "function" ? api : undefined;
 }
 
-const PLURAL: Record<SyncEntityType, string> = {
+const PLURAL_KNOWN: Record<string, string> = {
   contact: "contacts",
   company: "companies",
   deal: "deals",
 };
+
+/** Pluralize an entity type for template ids / datasource names. Custom entities fall back to +"s". */
+function plural(entityType: SyncEntityType): string {
+  return PLURAL_KNOWN[entityType] ?? (entityType.endsWith("s") ? entityType : `${entityType}s`);
+}
 
 function titleCase(provider: SyncProvider): string {
   return provider.charAt(0).toUpperCase() + provider.slice(1);
@@ -194,11 +200,11 @@ function titleCase(provider: SyncProvider): string {
 
 /** Built-in template id Personize ships per provider+object, e.g. `hubspot_contacts_standard`. */
 function builtinTemplateId(provider: SyncProvider, entityType: SyncEntityType): string {
-  return `${provider}_${PLURAL[entityType]}_standard`;
+  return `${provider}_${plural(entityType)}_standard`;
 }
 
 function datasourceName(provider: SyncProvider, entityType: SyncEntityType): string {
-  return `${titleCase(provider)} ${titleCase(PLURAL[entityType])}`;
+  return `${titleCase(provider)} ${titleCase(plural(entityType))}`;
 }
 
 /** How field mappings are resolved when creating a datasource. */
@@ -220,6 +226,12 @@ export interface EnsureDatasourceOptions {
    * for non-standard entities (deal/ticket/custom) that email/website can't identify.
    */
   identityFields?: DatasourceIdentityFields;
+  /**
+   * Explicit field mappings for a manual-mode create. Set for custom entities
+   * (built from their manifest); when present, `mappingMode` is ignored and the
+   * datasource is created `manual` with these. Standard entities omit it.
+   */
+  propertyMappings?: unknown[];
 }
 
 /** Guard the custom-key pairing before it reaches the API (which 400s on a lone field). */
@@ -257,9 +269,26 @@ async function createDatasource(
   mappingMode: MappingMode,
   maxRecords?: number,
   identityFields?: DatasourceIdentityFields,
+  propertyMappings?: unknown[],
 ): Promise<DatasourceRecord> {
   const cap = maxRecords != null ? { maxRecords } : {};
   const identity = identityFields ? { identityFields } : {};
+
+  // Custom entity: caller supplied explicit mappings (from its manifest). Create
+  // manual directly — no template/AI resolution.
+  if (propertyMappings && propertyMappings.length > 0) {
+    const created = await api.datasources.create({
+      name,
+      provider,
+      entityType,
+      mode: "manual",
+      propertyMappings,
+      direction: "in",
+      ...identity,
+      ...cap,
+    });
+    return created.data;
+  }
 
   const createFromAi = async (): Promise<DatasourceRecord> => {
     const suggestion = await api.suggestMappings({ provider, entityType, mode: "ai" });
@@ -348,7 +377,7 @@ export async function ensureDatasource(
   options: EnsureDatasourceOptions = {},
 ): Promise<DatasourceRecord> {
   const api = integrationsApi();
-  const { maxRecords, mappingMode = "template", identityFields } = options;
+  const { maxRecords, mappingMode = "template", identityFields, propertyMappings } = options;
   assertValidIdentityFields(identityFields);
 
   const match = matchDatasource(await listDatasources(api), provider, entityType);
@@ -375,6 +404,7 @@ export async function ensureDatasource(
     mappingMode,
     maxRecords,
     identityFields,
+    propertyMappings,
   );
   logger.info("personize-sync: created datasource", { provider, entityType, id: created.id, mappingMode });
   return created;

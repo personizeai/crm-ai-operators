@@ -1,0 +1,31 @@
+{
+  "name": "Deals",
+  "slug": "deals",
+  "description": "CRM deals/opportunities mirrored into Personize. First-class custom-sync entity: identified by a custom key (deal name), not email/website. Demonstrates the modular custom-entity sync — adding another custom entity is a manifest like this one.",
+  "icon": "handshake",
+  "color": "#0EA5E9",
+  "primaryKeyField": "deal_name",
+  "crmSync": {
+    "entityType": "deal",
+    "standard": false,
+    "crmObject": { "hubspot": "deals" },
+    "identity": { "keyName": "deal_name", "crmFields": { "hubspot": "dealname" } }
+  },
+  "properties": [
+    { "propertyName": "Deal Name", "systemName": "deal_name", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "dealname" }, "description": "Deal/opportunity name. The custom identity key for this entity." },
+    { "propertyName": "Amount", "systemName": "amount", "type": "number", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "amount" }, "description": "Deal value in the CRM's currency." },
+    { "propertyName": "Deal Stage", "systemName": "deal_stage", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "dealstage" }, "description": "Native CRM pipeline stage." },
+    { "propertyName": "Pipeline", "systemName": "pipeline", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "pipeline" }, "description": "CRM pipeline the deal belongs to." },
+    { "propertyName": "Close Date", "systemName": "close_date", "type": "date", "autoSystem": false, "source": "crm", "writeback": false, "crmFields": { "hubspot": "closedate" }, "description": "Expected or actual close date." },
+
+    { "propertyName": "CRM Source", "systemName": "crm_source", "type": "options", "autoSystem": false, "source": "crm", "writeback": false, "options": ["HubSpot", "Salesforce", "Other"], "description": "CRM where this deal originated." },
+    { "propertyName": "CRM Record ID", "systemName": "crm_record_id", "type": "text", "autoSystem": false, "source": "crm", "writeback": false, "description": "Native CRM deal identifier for writeback. Populated by Personize managed sync (hs_object_id)." },
+
+    { "propertyName": "Deal Score", "systemName": "deal_score", "type": "number", "autoSystem": true, "source": "inferred", "writeback": true, "description": "0-100 likelihood/priority score combining amount, stage, momentum, and account signals." },
+    { "propertyName": "Deal Score Reason", "systemName": "deal_score_reason", "type": "text", "autoSystem": true, "source": "inferred", "writeback": true, "description": "One-sentence explanation for the latest deal score." },
+    { "propertyName": "Next Best Action", "systemName": "next_best_action", "type": "text", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Recommended next action to advance the deal." },
+
+    { "propertyName": "Context", "systemName": "context", "type": "text", "autoSystem": true, "source": "inferred", "writeback": false, "description": "Current deal-state summary. Rewritten each cycle by whichever agent has the latest understanding. The 'start here' for any deal-level engagement." },
+    { "propertyName": "Updates", "systemName": "updates", "type": "array", "autoSystem": true, "source": "inferred", "writeback": false, "updateSemantics": "append", "description": "Chronological timeline of deal-level events. Each entry: { author, type, summary, details, timestamp }. Append-only." }
+  ]
+}
