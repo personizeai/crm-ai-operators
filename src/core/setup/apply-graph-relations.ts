@@ -3,7 +3,6 @@ import path from "node:path";
 import { z } from "zod";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
-import { describeApiError } from "../lib/personize-helpers.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 
@@ -72,19 +71,12 @@ export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRe
 
   const desired = toRelationTypes(relations);
 
-  // Endpoint split (verified live): the flat GET /relation-types *list* route is
-  // unrouted on the API and 400s with an unrelated "orgId, propertyName, and
-  // query are required", but the POST create route works. So read existing
-  // types from the graph *config* snapshot (GET /graph/config, which does work)
-  // and write each new one via the additive per-item createRelationType. Note
-  // we deliberately avoid putConfig here: a whole-bundle upsert risks dropping
-  // built-in relation types, whereas per-item create can only add. Both live
-  // under client.v1_1.memory.*; absent on the private gateway subset, so probe
-  // and warn rather than throw.
+  // Relation types live under /api/v1.1/memory/manage/relation-types
+  // (client.v1_1.memory.*): list to reconcile, create per-item (additive).
+  // Not present on the private gateway subset — probe and warn rather than throw.
   const mem = (client as any).v1_1?.memory;
-  const graph = mem?.graph;
-  if (!mem || typeof mem.createRelationType !== "function" || !graph || typeof graph.getConfig !== "function") {
-    const msg = "graph relation-type API not available on this backend; skipping graph-relation registration";
+  if (!mem || typeof mem.listRelationTypes !== "function" || typeof mem.createRelationType !== "function") {
+    const msg = "relation-types API not available on this backend; skipping graph-relation registration";
     logger.warn(msg);
     result.warnings.push(msg);
     return result;
@@ -92,11 +84,11 @@ export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRe
 
   let existingNames: Set<string>;
   try {
-    const res = await graph.getConfig();
-    const items: Array<{ typeName?: string }> = res?.data?.relationTypes ?? [];
+    const res = await mem.listRelationTypes();
+    const items: Array<{ typeName?: string }> = res?.data?.items ?? [];
     existingNames = new Set(items.filter((it) => it?.typeName).map((it) => it.typeName as string));
   } catch (err) {
-    const msg = `Failed to read graph config: ${describeApiError(err)}`;
+    const msg = `Failed to list relation types: ${(err as Error).message}`;
     logger.warn(msg);
     result.warnings.push(msg);
     return result;
@@ -123,7 +115,7 @@ export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRe
       result.created++;
       result.details.push(`Created relation type: ${rt.typeName}`);
     } catch (err) {
-      const msg = `Failed to create relation type "${rt.typeName}": ${describeApiError(err)}`;
+      const msg = `Failed to create relation type "${rt.typeName}": ${(err as Error).message}`;
       logger.warn(msg);
       result.warnings.push(msg);
     }

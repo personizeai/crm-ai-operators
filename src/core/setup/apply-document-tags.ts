@@ -3,7 +3,6 @@ import path from "node:path";
 import { z } from "zod";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
-import { describeApiError } from "../lib/personize-helpers.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 
@@ -64,7 +63,7 @@ export async function applyDocumentTags(dryRun: boolean): Promise<ApplyDocumentT
     const items: ExistingTag[] = res?.tags ?? [];
     existingByName = new Map(items.filter((it) => it?.canonical_tag).map((it) => [it.canonical_tag, it]));
   } catch (err) {
-    const msg = `Failed to list document tags: ${describeApiError(err)}`;
+    const msg = `Failed to list document tags: ${(err as Error).message}`;
     logger.warn(msg);
     result.warnings.push(msg);
     return result;
@@ -98,7 +97,7 @@ export async function applyDocumentTags(dryRun: boolean): Promise<ApplyDocumentT
         result.details.push(`Document tag up-to-date: ${tag.name}`);
       }
     } catch (err) {
-      const msg = `Failed to apply document tag "${tag.name}": ${describeApiError(err)}`;
+      const msg = `Failed to apply document tag "${tag.name}": ${(err as Error).message}`;
       logger.warn(msg);
       result.warnings.push(msg);
     }

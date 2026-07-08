@@ -3,7 +3,6 @@ import path from "node:path";
 import { z } from "zod";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
-import { describeApiError } from "../lib/personize-helpers.js";
 
 const MANIFEST_DIR = path.join(process.cwd(), "manifests");
 
@@ -79,7 +78,7 @@ export async function applyDocumentTypes(dryRun: boolean): Promise<ApplyDocument
     const items: ExistingDocType[] = res?.types ?? [];
     existingByName = new Map(items.filter((it) => it?.type_name).map((it) => [it.type_name, it]));
   } catch (err) {
-    const msg = `Failed to list document types: ${describeApiError(err)}`;
+    const msg = `Failed to list document types: ${(err as Error).message}`;
     logger.warn(msg);
     result.warnings.push(msg);
     return result;
@@ -120,7 +119,7 @@ export async function applyDocumentTypes(dryRun: boolean): Promise<ApplyDocument
         result.details.push(`Document type up-to-date: ${typeName}`);
       }
     } catch (err) {
-      const msg = `Failed to apply document type "${typeName}": ${describeApiError(err)}`;
+      const msg = `Failed to apply document type "${typeName}": ${(err as Error).message}`;
       logger.warn(msg);
       result.warnings.push(msg);
     }
