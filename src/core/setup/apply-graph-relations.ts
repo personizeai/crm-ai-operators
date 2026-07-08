@@ -72,8 +72,8 @@ export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRe
   const desired = toRelationTypes(relations);
 
   // Relation types live under /api/v1.1/memory/manage/relation-types
-  // (client.v1_1.memory.*). Not present on the private gateway subset — probe
-  // and warn rather than throw.
+  // (client.v1_1.memory.*): list to reconcile, create per-item (additive).
+  // Not present on the private gateway subset — probe and warn rather than throw.
   const mem = (client as any).v1_1?.memory;
   if (!mem || typeof mem.listRelationTypes !== "function" || typeof mem.createRelationType !== "function") {
     const msg = "relation-types API not available on this backend; skipping graph-relation registration";
