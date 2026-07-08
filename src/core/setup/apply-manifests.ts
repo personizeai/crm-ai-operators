@@ -4,6 +4,7 @@ import matter from "gray-matter";
 import { z } from "zod";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
+import { describeApiError } from "../lib/personize-helpers.js";
 import type { CrmId } from "../operations/types.js";
 import { applyCrmProperties, type ApplyCrmPropertiesResult } from "./apply-crm-properties.js";
 import { applyEntityTypes, type ApplyEntityTypesResult } from "./apply-entity-types.js";
@@ -326,7 +327,7 @@ export async function applyManifests(options: ApplyOptions): Promise<ApplyManife
  */
 function nonFatal<T extends { warnings: string[] }>(step: string, empty: () => T): (err: unknown) => T {
   return (err: unknown) => {
-    const msg = `${step} registration failed: ${(err as Error)?.message ?? String(err)}`;
+    const msg = `${step} registration failed: ${describeApiError(err)}`;
     logger.warn(msg);
     const result = empty();
     result.warnings.push(msg);
