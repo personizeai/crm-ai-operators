@@ -19,10 +19,14 @@ export interface ApplyGraphRelationsResult {
   created: number;
   skipped: number;
   details: string[];
+  warnings: string[];
 }
 
-function relationKey(r: GraphRelation): string {
-  return `${r.fromType}::${r.relation}::${r.toType}`;
+interface DesiredRelationType {
+  typeName: string;
+  description: string;
+  allowedFromTypes: string[];
+  allowedToTypes: string[];
 }
 
 async function loadGraphRelations(): Promise<GraphRelation[]> {
@@ -36,35 +40,91 @@ async function loadGraphRelations(): Promise<GraphRelation[]> {
   });
 }
 
-export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRelationsResult> {
-  const result: ApplyGraphRelationsResult = { created: 0, skipped: 0, details: [] };
+/**
+ * The manifest lists relations as (fromType, relation, toType) triples, but the
+ * API models a relation *type* keyed by name with allowedFromTypes/allowedToTypes
+ * arrays. Collapse triples that share a relation name into one relation type,
+ * unioning their endpoint constraints.
+ */
+function toRelationTypes(relations: GraphRelation[]): DesiredRelationType[] {
+  const byName = new Map<string, DesiredRelationType>();
+  for (const rel of relations) {
+    let entry = byName.get(rel.relation);
+    if (!entry) {
+      entry = { typeName: rel.relation, description: rel.description, allowedFromTypes: [], allowedToTypes: [] };
+      byName.set(rel.relation, entry);
+    }
+    if (!entry.allowedFromTypes.includes(rel.fromType)) entry.allowedFromTypes.push(rel.fromType);
+    if (!entry.allowedToTypes.includes(rel.toType)) entry.allowedToTypes.push(rel.toType);
+  }
+  return [...byName.values()];
+}
 
-  const desired = await loadGraphRelations().catch(() => {
+export async function applyGraphRelations(dryRun: boolean): Promise<ApplyGraphRelationsResult> {
+  const result: ApplyGraphRelationsResult = { created: 0, skipped: 0, details: [], warnings: [] };
+
+  const relations = await loadGraphRelations().catch(() => {
     logger.info("No graph-relations manifest found; skipping");
     return [] as GraphRelation[];
   });
-  if (desired.length === 0) return result;
+  if (relations.length === 0) return result;
 
-  const existingRes = await (client as any).context?.list?.({ type: "graph-relation" }).catch(() => null);
-  const existingKeys = new Set<string>(
-    (existingRes?.data ?? [])
-      .filter((item: any) => item?.fromType && item?.relation && item?.toType)
-      .map((item: any) => `${item.fromType}::${item.relation}::${item.toType}`)
-  );
+  const desired = toRelationTypes(relations);
 
-  for (const rel of desired) {
-    const key = relationKey(rel);
-    if (existingKeys.has(key)) {
-      result.skipped++;
-      result.details.push(`Graph relation exists: ${key}`);
-      continue;
-    }
-    if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create graph relation: ${key}`); continue; }
-    await (client as any).context.create({ type: "graph-relation", ...rel });
-    result.created++;
-    result.details.push(`Created graph relation: ${key}`);
+  // Relation types live under /api/v1.1/memory/manage/relation-types
+  // (client.v1_1.memory.*). Not present on the private gateway subset — probe
+  // and warn rather than throw.
+  const mem = (client as any).v1_1?.memory;
+  if (!mem || typeof mem.listRelationTypes !== "function" || typeof mem.createRelationType !== "function") {
+    const msg = "relation-types API not available on this backend; skipping graph-relation registration";
+    logger.warn(msg);
+    result.warnings.push(msg);
+    return result;
   }
 
-  logger.info("Graph relations applied", { created: result.created, skipped: result.skipped });
+  let existingNames: Set<string>;
+  try {
+    const res = await mem.listRelationTypes();
+    const items: Array<{ typeName?: string }> = res?.data?.items ?? [];
+    existingNames = new Set(items.filter((it) => it?.typeName).map((it) => it.typeName as string));
+  } catch (err) {
+    const msg = `Failed to list relation types: ${(err as Error).message}`;
+    logger.warn(msg);
+    result.warnings.push(msg);
+    return result;
+  }
+
+  for (const rt of desired) {
+    if (existingNames.has(rt.typeName)) {
+      result.skipped++;
+      result.details.push(`Relation type exists: ${rt.typeName}`);
+      continue;
+    }
+    if (dryRun) {
+      result.created++;
+      result.details.push(`[DRY RUN] Would create relation type: ${rt.typeName}`);
+      continue;
+    }
+    try {
+      await mem.createRelationType({
+        typeName: rt.typeName,
+        description: rt.description,
+        allowedFromTypes: rt.allowedFromTypes,
+        allowedToTypes: rt.allowedToTypes,
+      });
+      result.created++;
+      result.details.push(`Created relation type: ${rt.typeName}`);
+    } catch (err) {
+      const msg = `Failed to create relation type "${rt.typeName}": ${(err as Error).message}`;
+      logger.warn(msg);
+      result.warnings.push(msg);
+    }
+  }
+
+  logger.info("Graph relations applied", {
+    created: result.created,
+    skipped: result.skipped,
+    warnings: result.warnings.length,
+  });
   return result;
 }

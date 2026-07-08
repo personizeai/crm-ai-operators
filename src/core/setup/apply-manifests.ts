@@ -308,10 +308,41 @@ export async function applyManifests(options: ApplyOptions): Promise<ApplyManife
     crmProperties = await applyCrmProperties({ crm, dryRun });
   }
 
-  const entityTypes = await applyEntityTypes(dryRun);
-  const documentTypes = await applyDocumentTypes(dryRun);
-  const documentTags = await applyDocumentTags(dryRun);
-  const graphRelations = await applyGraphRelations(dryRun);
+  // Entity/doc/tag/relation registration is independent of the collections,
+  // guidelines and CRM-property provisioning above. Keep each step non-fatal so
+  // an API/backend mismatch here can't abort a run whose core work already
+  // succeeded. Each apply* already handles its own errors; this is a backstop.
+  const entityTypes = await applyEntityTypes(dryRun).catch(nonFatal("entity-types", emptyEntityTypes));
+  const documentTypes = await applyDocumentTypes(dryRun).catch(nonFatal("document-types", emptyDocumentTypes));
+  const documentTags = await applyDocumentTags(dryRun).catch(nonFatal("document-tags", emptyDocumentTags));
+  const graphRelations = await applyGraphRelations(dryRun).catch(nonFatal("graph-relations", emptyGraphRelations));
 
   return { collections, guidelines, entityTypes, documentTypes, documentTags, graphRelations, crmProperties };
+}
+
+/**
+ * Wraps a registration step so an unexpected throw degrades to a warning-bearing
+ * empty result instead of aborting the whole apply run.
+ */
+function nonFatal<T extends { warnings: string[] }>(step: string, empty: () => T): (err: unknown) => T {
+  return (err: unknown) => {
+    const msg = `${step} registration failed: ${(err as Error)?.message ?? String(err)}`;
+    logger.warn(msg);
+    const result = empty();
+    result.warnings.push(msg);
+    return result;
+  };
+}
+
+function emptyEntityTypes(): ApplyEntityTypesResult {
+  return { created: 0, updated: 0, skipped: 0, details: [], warnings: [] };
+}
+function emptyDocumentTypes(): ApplyDocumentTypesResult {
+  return { created: 0, updated: 0, skipped: 0, details: [], warnings: [] };
+}
+function emptyDocumentTags(): ApplyDocumentTagsResult {
+  return { created: 0, updated: 0, skipped: 0, details: [], warnings: [] };
+}
+function emptyGraphRelations(): ApplyGraphRelationsResult {
+  return { created: 0, skipped: 0, details: [], warnings: [] };
 }
