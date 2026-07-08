@@ -21,6 +21,8 @@ export interface ApplyEntityTypesResult {
   updated: number;
   skipped: number;
   details: string[];
+  /** Non-fatal problems (e.g. an unsupported backend, or a type that can't be created). */
+  warnings: string[];
 }
 
 async function loadEntityTypes(): Promise<EntityType[]> {
@@ -34,8 +36,15 @@ async function loadEntityTypes(): Promise<EntityType[]> {
   });
 }
 
+interface ExistingEntityType {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
 export async function applyEntityTypes(dryRun: boolean): Promise<ApplyEntityTypesResult> {
-  const result: ApplyEntityTypesResult = { created: 0, updated: 0, skipped: 0, details: [] };
+  const result: ApplyEntityTypesResult = { created: 0, updated: 0, skipped: 0, details: [], warnings: [] };
 
   const desired = await loadEntityTypes().catch(() => {
     logger.info("No entity-types manifest found; skipping");
@@ -43,32 +52,71 @@ export async function applyEntityTypes(dryRun: boolean): Promise<ApplyEntityType
   });
   if (desired.length === 0) return result;
 
-  // Fetch existing entity types. SDK method TBD — using context list with type filter as fallback.
-  const existingRes = await (client as any).context?.list?.({ type: "entity-type" }).catch(() => null);
-  const existingByName = new Map<string, { id: string; displayName: string; description: string }>();
-  for (const item of existingRes?.data ?? []) {
-    if (item?.name) existingByName.set(item.name, item);
+  // Entity types live under GET /api/v1/entity-types (client.entityTypes.*).
+  // The API exposes list/get/update/archive but no create — entity types are
+  // system-managed, so this step reconciles metadata on existing types and
+  // warns (never throws) for any desired type the backend doesn't already own.
+  const listFn = (client as any).entityTypes?.list;
+  if (typeof listFn !== "function") {
+    const msg = "entityTypes API not available on this backend; skipping entity-type registration";
+    logger.warn(msg);
+    result.warnings.push(msg);
+    return result;
+  }
+
+  let existingByName: Map<string, ExistingEntityType>;
+  try {
+    const res = await client.entityTypes.list();
+    const items: ExistingEntityType[] = (res as any)?.data ?? [];
+    existingByName = new Map(items.filter((it) => it?.name).map((it) => [it.name, it]));
+  } catch (err) {
+    const msg = `Failed to list entity types: ${(err as Error).message}`;
+    logger.warn(msg);
+    result.warnings.push(msg);
+    return result;
   }
 
   for (const et of desired) {
     const existing = existingByName.get(et.name);
 
     if (!existing) {
-      if (dryRun) { result.created++; result.details.push(`[DRY RUN] Would create entity type: ${et.name}`); continue; }
-      await (client as any).context.create({ type: "entity-type", name: et.name, displayName: et.displayName, description: et.description, primaryKey: et.primaryKey, icon: et.icon });
-      result.created++;
-      result.details.push(`Created entity type: ${et.name}`);
-    } else if (existing.displayName !== et.displayName || existing.description !== et.description) {
-      if (dryRun) { result.updated++; result.details.push(`[DRY RUN] Would update entity type: ${et.name}`); continue; }
-      await (client as any).context.update(existing.id, { displayName: et.displayName, description: et.description, icon: et.icon });
-      result.updated++;
-      result.details.push(`Updated entity type: ${et.name}`);
-    } else {
+      // No create endpoint exists — entity types are provisioned by Personize.
+      const msg = `Entity type "${et.name}" is not registered and cannot be created via the API (system-managed); skipping`;
+      logger.warn(msg);
+      result.warnings.push(msg);
+      result.skipped++;
+      continue;
+    }
+
+    const drifted = existing.description !== et.description || (et.icon !== undefined && existing.icon !== et.icon);
+    if (!drifted) {
       result.skipped++;
       result.details.push(`Entity type up-to-date: ${et.name}`);
+      continue;
+    }
+
+    if (dryRun) {
+      result.updated++;
+      result.details.push(`[DRY RUN] Would update entity type: ${et.name}`);
+      continue;
+    }
+
+    try {
+      await client.entityTypes.update(existing.id, { description: et.description, icon: et.icon });
+      result.updated++;
+      result.details.push(`Updated entity type: ${et.name}`);
+    } catch (err) {
+      const msg = `Failed to update entity type "${et.name}": ${(err as Error).message}`;
+      logger.warn(msg);
+      result.warnings.push(msg);
     }
   }
 
-  logger.info("Entity types applied", { created: result.created, updated: result.updated, skipped: result.skipped });
+  logger.info("Entity types applied", {
+    created: result.created,
+    updated: result.updated,
+    skipped: result.skipped,
+    warnings: result.warnings.length,
+  });
   return result;
 }
