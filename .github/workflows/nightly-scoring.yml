@@ -1,0 +1,33 @@
+name: Nightly Scoring
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  score:
+    name: Score companies + contacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PERSONIZE_MODE: hosted
+      PERSONIZE_SECRET_KEY: ${{ secrets.PERSONIZE_SECRET_KEY }}
+      PERSONIZE_API_BASE_URL: https://agent.personize.ai
+      DRY_RUN: "false"
+      LOG_LEVEL: info
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+
+      - name: Score companies (ICP fit)
+        continue-on-error: true
+        run: npm run pipeline -- score.icp-fit --crm hubspot
+
+      - name: Score contacts (lead quality)
+        continue-on-error: true
+        run: npm run pipeline -- score.lead-quality --crm hubspot
