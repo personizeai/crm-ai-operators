@@ -1,6 +1,7 @@
 import { client } from "../core/config.js";
 import { logger } from "../core/lib/logger.js";
 import type { CrmId } from "../core/operations/types.js";
+import { crmPassthrough } from "./passthrough.js";
 
 /**
  * Personize-managed CRM sync (sync-in / sync-out).
@@ -503,6 +504,110 @@ export async function runSync(
   return last;
 }
 
+/**
+ * Result of a live, read-only connection probe.
+ *
+ * `connected`:
+ * - `true`  — the probe returned 2xx; the org's OAuth grant for this provider is live.
+ * - `false` — the probe returned 401/403; the grant is missing or revoked.
+ * - `undefined` — inconclusive (5xx, timeout, network error, or no probe for this
+ *   provider). We can't distinguish "connection down" from "transient blip", so we
+ *   don't claim either way.
+ */
+export interface ConnectionStatus {
+  provider: SyncProvider;
+  connected: boolean | undefined;
+  /** Human-legible reason — the probe path + HTTP status, or the error message. */
+  detail: string;
+}
+
+/**
+ * A cheap, side-effect-free read whose only job is to exercise the org's OAuth
+ * grant for `provider`. Returns undefined for providers we have no probe for
+ * (unknown providers can't be verified this way). Paths stay inside each
+ * provider's passthrough allowlist (hubspot `/crm/`, salesforce `/services/data/`).
+ */
+export function connectionProbe(
+  provider: SyncProvider,
+  entityType: SyncEntityType,
+): { path: string; query?: Record<string, string | number | boolean> } | undefined {
+  if (provider === "hubspot") {
+    // Bounded 1-record read of the object we'd sync — auth-gated and harmless.
+    return { path: `/crm/v3/objects/${plural(entityType)}`, query: { limit: 1, archived: false } };
+  }
+  if (provider === "salesforce") {
+    // Lists available API versions — auth-gated, object- and version-agnostic.
+    return { path: "/services/data/" };
+  }
+  return undefined;
+}
+
+/**
+ * Whether an error is a definitive "this provider is not connected" signal — an
+ * auth rejection (401/403) or Personize's structured `connection_not_found` /
+ * "no active … connection" error. These mean a live run WOULD fail, so they flip
+ * the dry-run to not-connected (vs. a transient 5xx/timeout, which stays
+ * inconclusive).
+ */
+export function isNotConnectedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(401|403)\b|unauthor|forbidden|connection_not_found|no active .*connection|not connected/i.test(message);
+}
+
+/** Classify an HTTP status from a connection probe into tri-state connectivity. */
+export function classifyProbeStatus(status: number | undefined): boolean | undefined {
+  if (status && status > 0 && status < 400) return true;
+  if (status === 401 || status === 403) return false;
+  return undefined;
+}
+
+/**
+ * Map a probe's tri-state connectivity onto a dry-run outcome. Only a definitive
+ * disconnection (`false`) blocks the run; an inconclusive probe (`undefined`)
+ * stays `ok` because the run may still succeed.
+ */
+export function connectionOutcome(connected: boolean | undefined): {
+  ok: boolean;
+  connectionVerified: boolean;
+} {
+  return { ok: connected !== false, connectionVerified: connected === true };
+}
+
+/**
+ * Verify the org's live OAuth connection for a provider with one cheap, read-only
+ * call — the connection-status primitive the SDK does not (yet) expose. Never
+ * throws: a definitive auth failure reports `connected: false`, anything else
+ * (5xx, timeout, unknown provider) reports `connected: undefined` so callers can
+ * distinguish "not connected" from "couldn't check".
+ */
+export async function checkConnection(
+  provider: SyncProvider,
+  entityType: SyncEntityType,
+): Promise<ConnectionStatus> {
+  const probe = connectionProbe(provider, entityType);
+  if (!probe) {
+    return { provider, connected: undefined, detail: `no connection probe defined for provider "${provider}"` };
+  }
+  try {
+    const res = await crmPassthrough({
+      crm: provider as CrmId,
+      method: "GET",
+      path: probe.path,
+      query: probe.query,
+      timeoutMs: 8_000,
+    });
+    const status = res.status ?? 0;
+    return {
+      provider,
+      connected: classifyProbeStatus(status),
+      detail: `probe ${probe.path} → HTTP ${status}`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { provider, connected: isNotConnectedError(error) ? false : undefined, detail: message };
+  }
+}
+
 export interface SyncValidation {
   ok: boolean;
   provider: SyncProvider;
@@ -510,6 +615,13 @@ export interface SyncValidation {
   direction: SyncDirection;
   /** True when no datasource exists yet — a live run would create one first. */
   willCreateDatasource: boolean;
+  /**
+   * Whether the org's live OAuth grant for `provider` was confirmed by a read-only
+   * probe. `true` = probe returned 2xx; `false` = probe returned 401/403; `undefined`
+   * = not probed or inconclusive (e.g. the existing-datasource path validates config
+   * server-side but does not touch the provider, so it can't claim the grant is live).
+   */
+  connectionVerified?: boolean;
   dataSourceId?: string;
   mappingMode?: string;
   propertyMappingsCount?: number;
@@ -521,8 +633,12 @@ export interface SyncValidation {
  *
  * If a datasource exists, calls `run({ dryRun: true })`, which validates config
  * and reports what the run would do without touching the provider. If none
- * exists, reports that a live run would create one first (no datasource is
- * created here — dry runs never write). Never throws: any failure is folded into
+ * exists, this is the acute case where "a template exists" was historically
+ * mistaken for "this will work": we run a live, read-only connection probe
+ * ({@link checkConnection}) so `ok` reflects whether the OAuth grant is actually
+ * live, not merely whether a builtin template name exists. A definitive 401/403
+ * flips `ok` to false; an inconclusive probe keeps `ok: true` but leaves
+ * `connectionVerified` unset. Never throws: any failure is folded into
  * `{ ok: false, note }` so the dry-run path can't crash an operation.
  */
 export async function validateSync(
@@ -535,11 +651,21 @@ export async function validateSync(
     const api = integrationsApi();
     const existing = matchDatasource(await listDatasources(api), provider, entityType);
     if (!existing) {
+      const status = await checkConnection(provider, entityType);
+      const target = `"${datasourceName(provider, entityType)}" (template ${builtinTemplateId(provider, entityType)})`;
+      const note =
+        status.connected === true
+          ? `${provider} connection verified (${status.detail}). No datasource yet — a live run would create ${target} then sync ${direction}.`
+          : status.connected === false
+            ? `${provider} is not connected (${status.detail}). Connect it in the Personize dashboard before syncing; a live run would fail.`
+            : `No datasource yet — a live run would create ${target} then sync ${direction}. Connection could not be verified (${status.detail}).`;
+      // Only a definitive auth failure blocks the dry-run; an inconclusive probe
+      // (5xx/timeout) must not hard-fail a run that might well succeed.
       return {
         ...base,
-        ok: true,
+        ...connectionOutcome(status.connected),
         willCreateDatasource: true,
-        note: `No datasource yet — a live run would create "${datasourceName(provider, entityType)}" (template ${builtinTemplateId(provider, entityType)}) then sync ${direction}.`,
+        note,
       };
     }
 
@@ -549,6 +675,8 @@ export async function validateSync(
       ...base,
       ok: true,
       willCreateDatasource: false,
+      // The dry-run validates config server-side but does not touch the provider,
+      // so it cannot claim the OAuth grant is live — leave connectionVerified unset.
       dataSourceId: existing.id,
       mappingMode: report.mappingMode,
       propertyMappingsCount: report.propertyMappingsCount,

@@ -26,6 +26,32 @@ The Personize `contacts` collection unifies both. Each record carries
 - `Personize_*__c` writeback fields are provisioned on **both** Lead and Contact
   by `setup.apply --crm salesforce`, so scores land wherever the person lives.
 
+### Syncing both populations
+
+Lead and Contact are **separate sObjects with separate builtin templates**, so a
+full people sync runs two datasources — both land in the unified `contacts`
+collection:
+
+- `contact` → `salesforce_contacts_standard` (Contact sObject). Resolves the
+  parent Account server-side, filling `company` (`Account.Name`) and
+  `company_domain` (`Account.Website`).
+- `lead` → `salesforce_leads_standard` (Lead sObject). Leads have no Account, so
+  the template falls back to the Lead's own `Company` → `company` and `Website` →
+  `company_domain` text fields.
+
+`crm.sync-core --crm salesforce` imports `contact`, `lead`, and `company` by
+default. **Do not point a Lead sync at the contacts template** — its
+`Account.*` traversal won't resolve for Leads.
+
+### `company_domain` coverage caveat (data quality, not a bug)
+
+`company_domain` only populates where the source has the underlying field set:
+for a Contact, the parent `Account.Website`; for a Lead, its own `Website`. A
+record whose Account has a null Website (or a Lead with no Website) syncs fine but
+leaves `company_domain` empty — the same shape as HubSpot's association-derived
+`company_domain`. Expect `company_domain` coverage to track the share of your
+Accounts/Leads that actually have a website filled in.
+
 ## Companies are Accounts
 
 The `companies` collection maps to the Salesforce **Account** object. There is no
@@ -39,6 +65,15 @@ default**. After `setup.apply --crm salesforce`, an admin must grant field-level
 security (read/edit) on the `Personize_*__c` fields to the relevant profiles or
 permission sets — otherwise reps won't see the scores and API writes to them may
 be rejected. `setup diff` and `setup apply` both print a reminder line per object.
+
+## Template mappings are snapshotted at datasource-create time
+
+The managed sync copies a template's field mappings **into the datasource when it
+is created** — later template changes do not propagate to existing datasources. If
+Personize ships an updated Salesforce template (e.g. new `Account.*` resolution
+for `company_domain`), a plain re-sync of an existing datasource keeps the old
+mappings. To pick up new fields, **delete and recreate** the datasource
+(`ensureDatasource` will recreate it from the current template on the next run).
 
 ## Writeback safety
 

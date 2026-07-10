@@ -148,7 +148,7 @@ Reference for the pitch phase. Contains stakeholder-specific pitches, verified R
 | Operations library | 26 operations, maintained | Build from scratch |
 | Governance layer | 18 guidelines, ready | Build from scratch |
 | Memory substrate | Personize, production-ready | Build from scratch |
-| CRM adapters | HubSpot live, Salesforce in progress | Build from scratch |
+| CRM adapters | HubSpot and Salesforce, both live | Build from scratch |
 | Audit trail | Built-in | Build from scratch |
 | Community | Open-source contributors | Solo maintenance |
 

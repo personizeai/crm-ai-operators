@@ -495,7 +495,7 @@ The economic case: one AI agent running five operations from this repo replaces 
 
 ## Status and roadmap
 
-This repo is production-ready for HubSpot. Salesforce is in active scaffold. All `live` operations are in use by Personize customers today.
+This repo is production-ready for HubSpot and Salesforce. Both providers share the full path — connection check, managed sync (in/out/schedule), custom-field provisioning, scoring, and CRM write-back — and every `live` operation runs identically across connected CRMs. All `live` operations are in use by Personize customers today.
 
 Planned:
 - Pipedrive adapter

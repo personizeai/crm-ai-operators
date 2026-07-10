@@ -49,20 +49,20 @@ Identify the current phase and load the indicated references. Phases are not str
 
 Before pitching or diagnosing, confirm three things:
 
-1. **Personize account?** Required. If not: sign up at app.personize.ai, connect HubSpot via OAuth, generate a `PERSONIZE_SECRET_KEY`. Setup takes ~5 minutes.
+1. **Personize account?** Required. If not: sign up at app.personize.ai, connect HubSpot or Salesforce via OAuth, generate a `PERSONIZE_SECRET_KEY`. Setup takes ~5 minutes.
 2. **Which CRM?**
    - HubSpot → all 26 operations available today
-   - Salesforce → setup + sync operations are live; generate/analyze/act/report/optimize are scaffold (coming soon). Say this clearly — do not promise Salesforce ops that don't exist yet.
-   - Both / evaluating → treat as HubSpot-first, Salesforce roadmap
+   - Salesforce → all 26 operations available today, at parity with HubSpot (connection check, managed sync, field provisioning, scoring, and writeback all run on both)
+   - Both / evaluating → both are first-class; operations run identically across connected CRMs
 3. **Repo cloned and `npm install` run?** If not, start there before any diagnosis.
 
 ## Diagnosis Flow (Inline — No Reference Load)
 
 Ask these in order. Answers map to a scenario in `references/scenarios.md`.
 
-**Q0 — CRM Platform** (gates everything downstream)
+**Q0 — CRM Platform** (informs object-model specifics, not availability)
 - A) HubSpot (full operations available)
-- B) Salesforce (setup + sync only today)
+- B) Salesforce (full operations available — at parity with HubSpot)
 - C) Both / evaluating
 
 **Q1 — Company Archetype**
@@ -87,7 +87,7 @@ Once you have Q0–Q3, load `references/scenarios.md` and find the matching cell
 
 ## Hard Rules
 
-1. **Always confirm CRM platform before any recommendation.** Salesforce scaffold operations must be flagged as "coming soon" — never presented as available today.
+1. **Always confirm CRM platform before any recommendation.** Not for availability — HubSpot and Salesforce are at parity, all 26 operations run on both — but because the object model differs (Salesforce splits people into Lead/Contact and maps companies to Account; see the salesforce-object-model guideline). Never present Salesforce as "coming soon."
 2. **Read `AGENTS.md` before touching any operation.** It contains the operational hard rules that govern every run.
 3. **Never recommend live writes without dry-run first.** `DRY_RUN=true` is the default and must stay that way until the customer has validated dry-run output and explicitly authorized live writes.
 4. **Never hallucinate operation names.** Always verify against `operation_list` (via MCP) or `CAPABILITY-MENU.md` before recommending specific operations by name.
