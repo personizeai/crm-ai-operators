@@ -4,7 +4,7 @@
 
 **Goal:** Fix the dispatcher/ai() correctness gaps found in the 2026-07-02 audit, add the orchestration capabilities that make the repo a no-brainer (chains, triage, verify, budget), and make the whole stack run against Personize Private (self-hosted gateway).
 
-**Architecture:** All Personize access already funnels through 7 lib modules — the private-mode work is a driver interface, not an operations rewrite. Capability flags gate hosted-only features (subagent, evaluate, serverOutputs) the same way the CRM live/scaffold pattern gates Salesforce.
+**Architecture:** All Personize access already funnels through 7 lib modules — the private-mode work is a driver interface, not an operations rewrite. Capability flags gate hosted-only features (subagent, evaluate, serverOutputs) the same way per-provider branches route CRM-specific behavior (e.g. HubSpot vs Salesforce write-back).
 
 **Tech stack:** TypeScript, node:test, @personize/sdk (hosted), @personize/gateway-sdk or REST (private).
 

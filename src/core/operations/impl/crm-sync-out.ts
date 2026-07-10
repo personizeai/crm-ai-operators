@@ -12,23 +12,8 @@ import {
 } from "../../../adapters/personize-sync.js";
 import { customEntitiesByType, type CustomEntity } from "../../lib/crm-custom-entities.js";
 import { buildCustomEntitySync } from "../../lib/crm-field-map.js";
+import { resolveSyncObjects } from "../../lib/sync-objects.js";
 import type { OperationEntry } from "../types.js";
-
-// Which objects to write back by default. Same default set as sync-in.
-const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
-  hubspot: ["contact", "company"],
-  salesforce: ["contact"],
-};
-
-function resolveObjects(provider: SyncProvider, requested: unknown, validCustom: Set<string>): SyncEntityType[] {
-  if (Array.isArray(requested) && requested.length > 0) {
-    return requested.filter(
-      (o): o is SyncEntityType =>
-        o === "contact" || o === "company" || (typeof o === "string" && validCustom.has(o)),
-    );
-  }
-  return DEFAULT_OBJECTS[provider] ?? ["contact"];
-}
 
 function explain(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
@@ -56,7 +41,7 @@ export const crmSyncOut: OperationEntry = {
     const inputObj = (input ?? {}) as { crm?: string; provider?: string; objects?: unknown };
     const provider = (inputObj.provider ?? inputObj.crm ?? context.crm ?? "hubspot") as SyncProvider;
     const customByType = await customEntitiesByType();
-    const objects = resolveObjects(provider, inputObj.objects, new Set(customByType.keys()));
+    const objects = resolveSyncObjects(provider, inputObj.objects, new Set(customByType.keys()));
 
     if (context.dryRun) {
       // Validate each object — no writes. Custom entities validate their manifest

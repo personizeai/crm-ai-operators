@@ -66,9 +66,9 @@ Embedded directly so it's always in context without a reference load. Covers:
 ### Diagnosis Flow (inline in SKILL.md)
 Three structured questions, asked in order. Answers map to a scenario in `scenarios.md`.
 
-**Q0 — CRM Platform** (gates everything downstream)
+**Q0 — CRM Platform** (informs object-model specifics, not availability)
 - HubSpot (all 26 operations available today)
-- Salesforce (setup + sync operations available; generate/analyze/act are scaffold — coming soon)
+- Salesforce (all 26 operations available today — at parity with HubSpot)
 - Both / evaluating
 
 **Q1 — Company Archetype**
@@ -90,7 +90,7 @@ Three structured questions, asked in order. Answers map to a scenario in `scenar
 - Win/loss analysis (why we win, why we lose, ICP refinement)
 
 ### Hard Rules (inline in SKILL.md)
-1. Always confirm CRM platform before any recommendation — Salesforce scaffold operations must be flagged as "coming soon" not "available"
+1. Always confirm CRM platform before any recommendation — for object-model specifics (Lead/Contact/Account), not availability; HubSpot and Salesforce are at parity and Salesforce must never be flagged "coming soon"
 2. Always read `AGENTS.md` before touching any operation
 3. Never recommend live writes without dry-run first (`DRY_RUN=true` is the default)
 4. Never hallucinate operation names — always verify against `operation_list` (via MCP) before recommending specific operations

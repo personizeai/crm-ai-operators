@@ -9,25 +9,10 @@ import {
 } from "../../../adapters/personize-sync.js";
 import { customEntitiesByType, type CustomEntity } from "../../lib/crm-custom-entities.js";
 import { buildCustomEntitySync } from "../../lib/crm-field-map.js";
+import { resolveSyncObjects } from "../../lib/sync-objects.js";
 import type { OperationEntry } from "../types.js";
 
-const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
-  hubspot: ["contact", "company"],
-  salesforce: ["contact"],
-  apollo: ["contact"],
-};
-
 const FREQUENCIES = new Set<ScheduleFrequency>(["hourly", "daily", "weekly", "manual-only"]);
-
-function resolveObjects(provider: SyncProvider, requested: unknown, validCustom: Set<string>): SyncEntityType[] {
-  if (Array.isArray(requested) && requested.length > 0) {
-    return requested.filter(
-      (o): o is SyncEntityType =>
-        o === "contact" || o === "company" || (typeof o === "string" && validCustom.has(o)),
-    );
-  }
-  return DEFAULT_OBJECTS[provider] ?? ["contact"];
-}
 
 function resolveFrequency(value: unknown): ScheduleFrequency {
   return typeof value === "string" && FREQUENCIES.has(value as ScheduleFrequency)
@@ -67,7 +52,7 @@ export const crmSyncSchedule: OperationEntry = {
     };
     const provider = (inputObj.provider ?? inputObj.crm ?? context.crm ?? "hubspot") as SyncProvider;
     const customByType = await customEntitiesByType();
-    const objects = resolveObjects(provider, inputObj.objects, new Set(customByType.keys()));
+    const objects = resolveSyncObjects(provider, inputObj.objects, new Set(customByType.keys()));
     const frequency = resolveFrequency(inputObj.frequency);
     // Explicit enabled:false, or frequency 'manual-only', disables the cron.
     const enabled = inputObj.enabled === false ? false : frequency !== "manual-only";
