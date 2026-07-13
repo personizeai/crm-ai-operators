@@ -67,6 +67,29 @@ export interface SkipIfRule {
   in_states?: string[];
 }
 
+/**
+ * Minimal, deterministic acceptance gate.
+ *
+ * "Completed" work is not necessarily "accepted" work. The reference paper's
+ * economic spine — cost per *accepted* unit — depends on that distinction, so
+ * an operation that produces reviewable output should declare the gate its
+ * output must pass and report accepted-vs-rejected counts, not just completions.
+ *
+ * This is intentionally the *reference* gate: deterministic checks only. Richer
+ * gates (prohibited-claims detection, evidence-coverage scoring, evaluator
+ * models, human review sampling, downstream validation) are future shared
+ * infrastructure — see docs/MATURITY.md. Do not present this as the full
+ * acceptance framework.
+ */
+export interface AcceptanceGate {
+  /** Require the output to have parsed against its declared schema. */
+  schema_valid?: boolean;
+  /** Require a non-empty evidence / reason string on the output. */
+  evidence_required?: boolean;
+  /** Require confidence >= this threshold (0..1) when the output carries one. */
+  minimum_confidence?: number;
+}
+
 export interface OperationEntry {
   name: string;
   mode: OperationMode;
@@ -85,5 +108,12 @@ export interface OperationEntry {
    */
   requires?: string[];
   skip_if?: SkipIfRule;
+  /**
+   * The acceptance gate this operation's output must pass to count as an
+   * *accepted* unit. Operations that emit reviewable output should declare one
+   * and report `attempted`/`accepted`/`rejected` in their result metrics.
+   * Absent = the operation does not distinguish acceptance yet (completion only).
+   */
+  acceptance?: AcceptanceGate;
   run(input: unknown, context: OperationContext): Promise<OperationResult>;
 }

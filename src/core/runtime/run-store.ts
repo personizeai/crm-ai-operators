@@ -10,6 +10,12 @@ export interface OperationRunRecord {
   dry_run: boolean;
   records_scanned?: number;
   records_updated?: number;
+  /** Outputs produced and evaluated against the operation's acceptance gate. */
+  attempted?: number;
+  /** Outputs that passed the acceptance gate — the accepted units. */
+  accepted?: number;
+  /** Outputs produced but rejected by the acceptance gate (distinct from failed). */
+  rejected?: number;
   summary?: string;
   started_at?: string;
   completed_at?: string;

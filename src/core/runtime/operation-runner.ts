@@ -71,6 +71,13 @@ export async function runOperation(
           typeof metrics.records_scanned === "number" ? metrics.records_scanned : undefined;
         const recordsUpdated =
           typeof metrics.records_updated === "number" ? metrics.records_updated : undefined;
+        // Acceptance vocabulary (present on operations that declare a gate):
+        // completion is not success, so persist accepted/rejected distinctly
+        // from records_updated. Cost per accepted unit is reconstructable from
+        // durable run history rather than a live transcript.
+        const attempted = typeof metrics.attempted === "number" ? metrics.attempted : undefined;
+        const accepted = typeof metrics.accepted === "number" ? metrics.accepted : undefined;
+        const rejected = typeof metrics.rejected === "number" ? metrics.rejected : undefined;
         const usage = getUsageTotals();
         // Surface per-run cost on the result so callers (e.g. the dispatcher's
         // budget accounting) can read it without a separate query.
@@ -93,6 +100,9 @@ export async function runOperation(
           summary: result.summary,
           records_scanned: recordsScanned,
           records_updated: recordsUpdated,
+          attempted,
+          accepted,
+          rejected,
           started_at: startedAt,
           completed_at: completedAt,
           credits_used: usage?.credits,

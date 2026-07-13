@@ -7,6 +7,7 @@ import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
 import { workspace } from "../../lib/workspace.js";
 import { crmWriteback } from "../../lib/crm-writeback.js";
+import { evaluateAcceptance, newTally, recordAcceptance } from "../../lib/acceptance.js";
 import type { CrmId, OperationEntry } from "../types.js";
 import { buildScaffold } from "../helpers.js";
 
@@ -80,6 +81,10 @@ export const scoreIcpFit: OperationEntry = {
   run_mode: "on-trigger",
   guidelines_required: ["icp-definition"],
   skip_if: { property: "icp_fit_score", updated_within: "7d" },
+  // Reference acceptance gate: a score counts as an *accepted* unit only when it
+  // parsed against the schema and carries a substantive reason. Completion alone
+  // (an AI call that returned) is not acceptance — see docs/MATURITY.md.
+  acceptance: { schema_valid: true, evidence_required: true },
   run: async (input, context) => {
     const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
     const skipIf = (input as { skip_if?: { updated_within?: string } } | undefined)?.skip_if;
@@ -117,6 +122,9 @@ export const scoreIcpFit: OperationEntry = {
     let scored = 0;
     let skipped = 0;
     let failed = 0;
+    // Acceptance tally: completed scores are evaluated against the gate so the
+    // run distinguishes accepted units from mere completions.
+    const acceptance = newTally();
     const sample: Array<{ domain: string; score: number; reason: string }> = [];
 
     for (const company of candidates) {
@@ -171,6 +179,17 @@ export const scoreIcpFit: OperationEntry = {
 
         const { icp_fit_score, icp_fit_reason } = result.output;
 
+        // Evaluate the produced score against the acceptance gate. The zod parse
+        // above succeeded (ai() throws otherwise), so schema_valid is true here;
+        // the gate still rejects scores whose reason is empty or a stub.
+        recordAcceptance(
+          acceptance,
+          evaluateAcceptance(scoreIcpFit.acceptance!, {
+            schema_valid: true,
+            evidence: icp_fit_reason,
+          }),
+        );
+
         // serverOutputs already synced the scores to Personize; mirror to the CRM too.
         const crmRecordId = typeof company.crm_record_id === "string" ? company.crm_record_id : undefined;
         await mirrorScoreToCrm(icp_fit_score, icp_fit_reason, crmRecordId, context.crm);
@@ -209,10 +228,19 @@ export const scoreIcpFit: OperationEntry = {
       operation: "score.icp-fit",
       dryRun: context.dryRun,
       status: "live",
-      summary: `Scored ${scored} of ${candidates.length} companies (${skipped} skipped, ${failed} failed).`,
+      summary:
+        `Scored ${scored} of ${candidates.length} companies ` +
+        `(${acceptance.accepted} accepted, ${acceptance.rejected} rejected, ${skipped} skipped, ${failed} failed).`,
       metrics: {
         records_scanned: candidates.length,
         records_updated: scored,
+        // Acceptance vocabulary: attempted = outputs produced and evaluated;
+        // accepted/rejected split those by the gate. Distinct from `failed`
+        // (errored before producing output) and `skipped` (never attempted).
+        attempted: acceptance.attempted,
+        accepted: acceptance.accepted,
+        rejected: acceptance.rejected,
+        rejection_reasons: acceptance.rejection_reasons,
         skipped,
         failed,
         sample,

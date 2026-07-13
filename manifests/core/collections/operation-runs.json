@@ -13,6 +13,9 @@
     { "propertyName": "Dry Run", "systemName": "dry_run", "type": "boolean", "autoSystem": false, "description": "Whether the operation was prevented from making live writes." },
     { "propertyName": "Records Scanned", "systemName": "records_scanned", "type": "number", "autoSystem": false, "description": "Count of records inspected." },
     { "propertyName": "Records Updated", "systemName": "records_updated", "type": "number", "autoSystem": false, "description": "Count of records updated." },
+    { "propertyName": "Attempted", "systemName": "attempted", "type": "number", "autoSystem": false, "description": "Outputs produced and evaluated against the operation's acceptance gate." },
+    { "propertyName": "Accepted", "systemName": "accepted", "type": "number", "autoSystem": false, "description": "Outputs that passed the acceptance gate — the accepted units." },
+    { "propertyName": "Rejected", "systemName": "rejected", "type": "number", "autoSystem": false, "description": "Outputs produced but rejected by the acceptance gate (distinct from failed)." },
     { "propertyName": "Summary", "systemName": "summary", "type": "text", "autoSystem": false, "description": "Human-readable result summary." },
     { "propertyName": "Started At", "systemName": "started_at", "type": "date", "autoSystem": false, "description": "Operation start timestamp." },
     { "propertyName": "Completed At", "systemName": "completed_at", "type": "date", "autoSystem": false, "description": "Operation completion timestamp." }
