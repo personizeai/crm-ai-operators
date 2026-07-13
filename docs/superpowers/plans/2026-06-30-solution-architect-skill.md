@@ -14,7 +14,7 @@
 - SKILL.md must have YAML frontmatter: `name:` and `description:` fields, matching the format in `skills/crm-ai-operators/SKILL.md`
 - All ROI figures must use verified values: $0.003/memorize, $0.001/recall, ~23x more work per dollar
 - All operation names must exactly match the registry (`src/core/operations/registry.ts`) — never invent names
-- Salesforce scaffold operations must always be flagged as "coming soon" — never presented as live
+- Salesforce is at parity with HubSpot — all 26 operations run on both; never present Salesforce as "coming soon"
 - Commit after each task to `Hamed-July-2026`
 
 ---
@@ -91,17 +91,17 @@ Before pitching or diagnosing, confirm three things:
 1. **Personize account?** Required. If not: sign up at app.personize.ai, connect HubSpot via OAuth, generate a `PERSONIZE_SECRET_KEY`. Setup takes ~5 minutes.
 2. **Which CRM?**
    - HubSpot → all 26 operations available today
-   - Salesforce → setup + sync operations are live; generate/analyze/act/report/optimize are scaffold (coming soon). Say this clearly — do not promise Salesforce ops that don't exist yet.
-   - Both / evaluating → treat as HubSpot-first, Salesforce roadmap
+   - Salesforce → all 26 operations available today, at parity with HubSpot (connection check, managed sync, field provisioning, scoring, and writeback all run on both)
+   - Both / evaluating → both are first-class; operations run identically across connected CRMs
 3. **Repo cloned and `npm install` run?** If not, start there before any diagnosis.
 
 ## Diagnosis Flow (Inline — No Reference Load)
 
 Ask these in order. Answers map to a scenario in `references/scenarios.md`.
 
-**Q0 — CRM Platform** (gates everything downstream)
+**Q0 — CRM Platform** (informs object-model specifics, not availability)
 - A) HubSpot (full operations available)
-- B) Salesforce (setup + sync only today)
+- B) Salesforce (full operations available — at parity with HubSpot)
 - C) Both / evaluating
 
 **Q1 — Company Archetype**
@@ -126,7 +126,7 @@ Once you have Q0–Q3, load `references/scenarios.md` and find the matching cell
 
 ## Hard Rules
 
-1. **Always confirm CRM platform before any recommendation.** Salesforce scaffold operations must be flagged as "coming soon" — never presented as available today.
+1. **Always confirm CRM platform before any recommendation.** Not for availability — HubSpot and Salesforce are at parity, all 26 operations run on both — but because the object model differs (Salesforce splits people into Lead/Contact and maps companies to Account). Never present Salesforce as "coming soon."
 2. **Read `AGENTS.md` before touching any operation.** It contains the operational hard rules that govern every run.
 3. **Never recommend live writes without dry-run first.** `DRY_RUN=true` is the default and must stay that way until the customer has validated dry-run output and explicitly authorized live writes.
 4. **Never hallucinate operation names.** Always verify against `operation_list` (via MCP) or `CAPABILITY-MENU.md` before recommending specific operations by name.
@@ -569,7 +569,7 @@ Reference for the pitch phase. Contains stakeholder-specific pitches, verified R
 | Operations library | 26 operations, maintained | Build from scratch |
 | Governance layer | 18 guidelines, ready | Build from scratch |
 | Memory substrate | Personize, production-ready | Build from scratch |
-| CRM adapters | HubSpot live, Salesforce in progress | Build from scratch |
+| CRM adapters | HubSpot and Salesforce, both live | Build from scratch |
 | Audit trail | Built-in | Build from scratch |
 | Community | Open-source contributors | Solo maintenance |
 
@@ -679,11 +679,11 @@ Five named stacks that group operations into cohesive rollout units. Use these i
 
 | Stack | Core operations | Time to first value | HubSpot | Salesforce |
 |-------|----------------|---------------------|---------|------------|
-| **Quick Win** | setup.apply, crm.sync-core, score.icp-fit, act.daily-digest | < 1 hour | ✓ Live | Partial (setup + sync only) |
-| **Pipeline Intelligence** | + score.lead-quality, analyze.buying-stage, report.pipeline-health | Day 1–2 | ✓ Live | Partial |
-| **Outreach Automation** | + generate.outreach-sequence, generate.meeting-brief, analyze.reply-sentiment, act.notify-rep-handoff | Day 2–5 | ✓ Live | Scaffold (coming soon) |
-| **Data Quality** | analyze.deduplication, sync.normalize-lifecycle, sync.push-properties, crm.sync-core | Day 1–3 | ✓ Live | Partial |
-| **Full RevOps** | All 26 operations + subagent pipelines | Week 1–3 | ✓ Live | Future |
+| **Quick Win** | setup.apply, crm.sync-core, score.icp-fit, act.daily-digest | < 1 hour | ✓ Live | ✓ Live |
+| **Pipeline Intelligence** | + score.lead-quality, analyze.buying-stage, report.pipeline-health | Day 1–2 | ✓ Live | ✓ Live |
+| **Outreach Automation** | + generate.outreach-sequence, generate.meeting-brief, analyze.reply-sentiment, act.notify-rep-handoff | Day 2–5 | ✓ Live | ✓ Live |
+| **Data Quality** | analyze.deduplication, sync.normalize-lifecycle, sync.push-properties, crm.sync-core | Day 1–3 | ✓ Live | ✓ Live |
+| **Full RevOps** | All 26 operations + subagent pipelines | Week 1–3 | ✓ Live | ✓ Live |
 
 ---
 
@@ -716,7 +716,7 @@ Each step gates the next. Don't run scoring before sync; don't run digest before
 - Each company has `icp_fit_score` (0–100) and `icp_fit_reason`
 - Each rep receives a ranked digest showing top 5 prospects with scores and next actions
 
-**Salesforce note:** `setup.apply` and `crm.sync-core` are live on Salesforce. `score.icp-fit` and `act.daily-digest` are scaffold — they will return a simulation envelope, not real output.
+**Salesforce note:** all four operations run live on Salesforce, at parity with HubSpot. `setup.apply` provisions `Personize_*__c` fields on Lead/Contact/Account; scores mirror back via write-back. Only the object model differs (Lead/Contact split, companies as Account).
 
 ---
 
@@ -748,7 +748,7 @@ report.pipeline-health (runs after scoring complete)
 - Each active deal has inferred `buying_stage` and `next_best_action`
 - Weekly pipeline health report: stage distribution, at-risk accounts, momentum signals
 
-**Salesforce note:** `score.lead-quality` is scaffold on Salesforce. `analyze.buying-stage` and `report.pipeline-health` are scaffold.
+**Salesforce note:** `score.lead-quality`, `analyze.buying-stage`, and `report.pipeline-health` all run live on Salesforce — they operate on Personize memory, which is CRM-neutral once records are synced in.
 
 ---
 
@@ -790,7 +790,7 @@ act.notify-rep-handoff (triggered by sentiment + score threshold)
 - All inbound replies classified and routed
 - Reps notified instantly when a contact is ready for human handoff
 
-**HubSpot/Salesforce:** All generate and analyze operations are HubSpot-only today. Salesforce scaffold coming soon.
+**HubSpot/Salesforce:** All generate and analyze operations run on both CRMs — they read and write Personize memory, not the CRM directly, so they are provider-neutral.
 
 ---
 
@@ -826,7 +826,7 @@ sync.push-properties (after Personize properties are computed)
 - Personize-computed properties (scores, stages, signals) pushed back to CRM
 - CRM and Personize memory in sync
 
-**Salesforce:** `analyze.deduplication` and `sync.normalize-lifecycle` are scaffold on Salesforce. `crm.sync-core` and `sync.push-properties` are live.
+**Salesforce:** all four operations run live on Salesforce. `sync.normalize-lifecycle` already carries the Salesforce lead-status / opportunity-stage canonical map; `crm.sync-core` and `sync.push-properties` are provider-generic.
 
 ---
 
@@ -859,7 +859,7 @@ sync.push-properties (after Personize properties are computed)
 - Daily: digest per rep, call summaries, buying stage updates, handoff alerts
 - Monthly: ICP definition updated, scoring weights recalibrated, playbook refined
 
-**Salesforce:** Research, report, and optimize operations are scaffold on Salesforce. Full RevOps stack is HubSpot-first.
+**Salesforce:** Research, report, and optimize operations run live on Salesforce. The full RevOps stack is at parity across both CRMs.
 ```
 
 - [ ] **Step 2: Verify**

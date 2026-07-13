@@ -8,11 +8,11 @@ Five named stacks that group operations into cohesive rollout units. Use these i
 
 | Stack | Core operations | Time to first value | HubSpot | Salesforce |
 |-------|----------------|---------------------|---------|------------|
-| **Quick Win** | setup.apply, crm.sync-core, score.icp-fit, act.daily-digest | < 1 hour | ✓ Live | Partial (setup + sync only) |
-| **Pipeline Intelligence** | + score.lead-quality, analyze.buying-stage, report.pipeline-health | Day 1–2 | ✓ Live | Partial |
-| **Outreach Automation** | + generate.outreach-sequence, generate.meeting-brief, analyze.reply-sentiment, act.notify-rep-handoff | Day 2–5 | ✓ Live | Scaffold (coming soon) |
-| **Data Quality** | analyze.deduplication, sync.normalize-lifecycle, sync.push-properties, crm.sync-core | Day 1–3 | ✓ Live | Partial |
-| **Full RevOps** | All 26 operations + subagent pipelines | Week 1–3 | ✓ Live | Future |
+| **Quick Win** | setup.apply, crm.sync-core, score.icp-fit, act.daily-digest | < 1 hour | ✓ Live | ✓ Live |
+| **Pipeline Intelligence** | + score.lead-quality, analyze.buying-stage, report.pipeline-health | Day 1–2 | ✓ Live | ✓ Live |
+| **Outreach Automation** | + generate.outreach-sequence, generate.meeting-brief, analyze.reply-sentiment, act.notify-rep-handoff | Day 2–5 | ✓ Live | ✓ Live |
+| **Data Quality** | analyze.deduplication, sync.normalize-lifecycle, sync.push-properties, crm.sync-core | Day 1–3 | ✓ Live | ✓ Live |
+| **Full RevOps** | All 26 operations + subagent pipelines | Week 1–3 | ✓ Live | ✓ Live |
 
 ---
 
@@ -45,7 +45,7 @@ Each step gates the next. Don't run scoring before sync; don't run digest before
 - Each company has `icp_fit_score` (0–100) and `icp_fit_reason`
 - Each rep receives a ranked digest showing top 5 prospects with scores and next actions
 
-**Salesforce note:** `setup.apply` and `crm.sync-core` are live on Salesforce. `score.icp-fit` and `act.daily-digest` are scaffold — they will return a simulation envelope, not real output.
+**Salesforce note:** all four operations run live on Salesforce, at parity with HubSpot. `setup.apply` provisions `Personize_*__c` fields on Lead/Contact/Account; scores mirror back via write-back. Only the object model differs (Lead/Contact split, companies as Account).
 
 ---
 
@@ -77,7 +77,7 @@ report.pipeline-health (runs after scoring complete)
 - Each active deal has inferred `buying_stage` and `next_best_action`
 - Weekly pipeline health report: stage distribution, at-risk accounts, momentum signals
 
-**Salesforce note:** `score.lead-quality` is scaffold on Salesforce. `analyze.buying-stage` and `report.pipeline-health` are scaffold.
+**Salesforce note:** `score.lead-quality`, `analyze.buying-stage`, and `report.pipeline-health` all run live on Salesforce — they operate on Personize memory, which is CRM-neutral once records are synced in.
 
 ---
 
@@ -119,7 +119,7 @@ act.notify-rep-handoff (triggered by sentiment + score threshold)
 - All inbound replies classified and routed
 - Reps notified instantly when a contact is ready for human handoff
 
-**HubSpot/Salesforce:** All generate and analyze operations are HubSpot-only today. Salesforce scaffold coming soon.
+**HubSpot/Salesforce:** All generate and analyze operations run on both CRMs — they read and write Personize memory, not the CRM directly, so they are provider-neutral.
 
 ---
 
@@ -155,7 +155,7 @@ sync.push-properties (after Personize properties are computed)
 - Personize-computed properties (scores, stages, signals) pushed back to CRM
 - CRM and Personize memory in sync
 
-**Salesforce:** `analyze.deduplication` and `sync.normalize-lifecycle` are scaffold on Salesforce. `crm.sync-core` and `sync.push-properties` are live.
+**Salesforce:** all four operations run live on Salesforce. `sync.normalize-lifecycle` already carries the Salesforce lead-status / opportunity-stage canonical map; `crm.sync-core` and `sync.push-properties` are provider-generic.
 
 ---
 
@@ -188,4 +188,4 @@ sync.push-properties (after Personize properties are computed)
 - Daily: digest per rep, call summaries, buying stage updates, handoff alerts
 - Monthly: ICP definition updated, scoring weights recalibrated, playbook refined
 
-**Salesforce:** Research, report, and optimize operations are scaffold on Salesforce. Full RevOps stack is HubSpot-first.
+**Salesforce:** Research, report, and optimize operations run live on Salesforce. The full RevOps stack is at parity across both CRMs.

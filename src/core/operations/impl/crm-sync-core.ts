@@ -13,34 +13,12 @@ import {
 } from "../../../adapters/personize-sync.js";
 import { customEntitiesByType, type CustomEntity } from "../../lib/crm-custom-entities.js";
 import { buildCustomEntitySync } from "../../lib/crm-field-map.js";
+import { resolveSyncObjects } from "../../lib/sync-objects.js";
 import type { OperationEntry } from "../types.js";
-
-// Default objects to import per provider. Salesforce companies (Account) ship a
-// template too, but we keep the conservative default until verified end-to-end.
-const DEFAULT_OBJECTS: Record<string, SyncEntityType[]> = {
-  hubspot: ["contact", "company"],
-  salesforce: ["contact"],
-  apollo: ["contact"],
-};
 
 // Providers Personize ships no builtin sync template for — their mappings must be
 // resolved via AI (suggestMappings → manual datasource).
 const PROVIDERS_WITHOUT_TEMPLATES = new Set(["apollo", "apollo-oauth"]);
-
-/**
- * Resolve the objects to sync. Standard entities (contact/company) plus any
- * registered custom entity (deal/ticket/… — discovered from manifests) are valid;
- * unknown requests are dropped. Defaults to the provider's standard objects.
- */
-function resolveObjects(provider: SyncProvider, requested: unknown, validCustom: Set<string>): SyncEntityType[] {
-  if (Array.isArray(requested) && requested.length > 0) {
-    return requested.filter(
-      (o): o is SyncEntityType =>
-        o === "contact" || o === "company" || (typeof o === "string" && validCustom.has(o)),
-    );
-  }
-  return DEFAULT_OBJECTS[provider] ?? ["contact"];
-}
 
 /** Coerce a record cap from input; ignore non-positive / non-integer values. */
 export function resolveMaxRecords(value: unknown): number | undefined {
@@ -97,7 +75,7 @@ export const crmSyncCore: OperationEntry = {
     // entities (contact/company) are always valid. Personize auto-maps standard;
     // custom entities carry manifest-derived mappings + a custom identity key.
     const customByType = await customEntitiesByType();
-    const objects = resolveObjects(provider, inputObj.objects, new Set(customByType.keys()));
+    const objects = resolveSyncObjects(provider, inputObj.objects, new Set(customByType.keys()));
     const maxRecords = resolveMaxRecords(inputObj.max_records ?? inputObj.maxRecords);
     const mappingMode = resolveMappingMode(inputObj.mapping_mode ?? inputObj.mappingMode, provider);
     const capNote = maxRecords != null ? ` (max ${maxRecords})` : "";
