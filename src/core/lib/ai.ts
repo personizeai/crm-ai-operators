@@ -323,6 +323,9 @@ async function runSinglePrompt<T extends z.ZodTypeAny>(
       response = await callAi(ai, sdkOpts, verb);
     } catch (error) {
       logger.error("AI prompt failed", { error: errMsg(error) });
+      // Preserve the original kind (e.g. aborted_by_model from resolvePromptResult);
+      // only unclassified errors collapse to sdk_error.
+      if (error instanceof AiPromptError) throw error;
       throw new AiPromptError("sdk_error", errMsg(error));
     }
 
@@ -395,6 +398,9 @@ async function runMultiStep<T extends z.ZodTypeAny>(
     response = await callAi(ai, sdkOpts, verb);
   } catch (error) {
     logger.error("AI multi-step prompt failed", { error: errMsg(error) });
+    // Preserve the original kind (e.g. aborted_by_model from resolvePromptResult);
+    // only unclassified errors collapse to sdk_error.
+    if (error instanceof AiPromptError) throw error;
     throw new AiPromptError("sdk_error", errMsg(error));
   }
 
@@ -561,6 +567,12 @@ async function resolvePromptResult(raw: any): Promise<any> {
 
     if (status === "failed" || status === "failed_stale") {
       const detail = data?.responsePayload?.error ?? data?.error ?? "no detail";
+      // The backend signals a model abort via responsePayload.error. Throw the
+      // dedicated kind so these are greppable/countable separately from transport
+      // failures (the sync `response.aborted` path this async deployment never hits).
+      if (detail === "aborted_by_model") {
+        throw new AiPromptError("aborted_by_model", `Prompt event ${eventId} ${status}: model aborted`);
+      }
       throw new AiPromptError("sdk_error", `Prompt event ${eventId} ${status}: ${detail}`);
     }
     const payload = data?.responsePayload;
