@@ -38,6 +38,23 @@ interface CompanyRecord {
   [key: string]: unknown;
 }
 
+// A company with zero firmographic grounding — only a name/domain/lifecycle stage —
+// makes the scoring model abort (aborted_by_model) rather than fabricate a
+// justification for a 0-100 score. See abortedbymodelnote.md. We treat these as a
+// distinct `insufficient_data` outcome (not a scoring failure) and route them to
+// enrichment first. The check mirrors the exact fields the model is given below.
+function hasScorableData(company: CompanyRecord): boolean {
+  const signals = company.buying_signals;
+  return Boolean(
+    company.industry ||
+      typeof company.employee_count === "number" ||
+      company.company_size_band ||
+      company.business_model ||
+      company.signal_strength ||
+      (Array.isArray(signals) && signals.length > 0),
+  );
+}
+
 async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
   const compiled = compileFilter(filter);
   return (await retrieveRecords({
@@ -117,6 +134,8 @@ export const scoreIcpFit: OperationEntry = {
     let scored = 0;
     let skipped = 0;
     let failed = 0;
+    let insufficientData = 0;
+    const insufficientSample: string[] = [];
     const sample: Array<{ domain: string; score: number; reason: string }> = [];
 
     for (const company of candidates) {
@@ -128,6 +147,15 @@ export const scoreIcpFit: OperationEntry = {
       const decision = evaluateSkipIf(effectiveSkipRule, company as Record<string, unknown>);
       if (decision.skip) {
         skipped++;
+        continue;
+      }
+
+      // Pre-flight: a record with no firmographic grounding can't be scored and
+      // reliably aborts the model. Surface it as its own outcome (enrich, then re-score).
+      if (!hasScorableData(company)) {
+        insufficientData++;
+        if (insufficientSample.length < 5) insufficientSample.push(company.domain);
+        logger.info("Skipping company with insufficient data to score", { domain: company.domain });
         continue;
       }
 
@@ -209,11 +237,13 @@ export const scoreIcpFit: OperationEntry = {
       operation: "score.icp-fit",
       dryRun: context.dryRun,
       status: "live",
-      summary: `Scored ${scored} of ${candidates.length} companies (${skipped} skipped, ${failed} failed).`,
+      summary: `Scored ${scored} of ${candidates.length} companies (${skipped} skipped, ${insufficientData} insufficient data, ${failed} failed).`,
       metrics: {
         records_scanned: candidates.length,
         records_updated: scored,
         skipped,
+        insufficient_data: insufficientData,
+        insufficient_data_sample: insufficientSample,
         failed,
         sample,
       },

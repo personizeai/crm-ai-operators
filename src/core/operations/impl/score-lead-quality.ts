@@ -54,6 +54,24 @@ interface CompanyRecord {
   [key: string]: unknown;
 }
 
+// A contact with no persona grounding — no title/function/seniority and no
+// engagement signals — makes the scoring model abort (aborted_by_model) rather
+// than fabricate a justification. See abortedbymodelnote.md. We treat these as a
+// distinct `insufficient_data` outcome (not a scoring failure) and route them to
+// enrichment first. The check mirrors the contact fields the model is given below.
+function hasScorableData(contact: ContactRecord): boolean {
+  const pains = contact.pain_points;
+  const interests = contact.interests;
+  return Boolean(
+    contact.job_title ||
+      contact.function ||
+      contact.seniority ||
+      contact.buying_stage ||
+      (Array.isArray(pains) && pains.length > 0) ||
+      (Array.isArray(interests) && interests.length > 0),
+  );
+}
+
 async function listContacts(filter: Filter): Promise<ContactRecord[]> {
   const compiled = compileFilter(filter);
   return (await retrieveRecords({
@@ -123,6 +141,8 @@ export const scoreLeadQuality: OperationEntry = {
     let scored = 0;
     let skipped = 0;
     let failed = 0;
+    let insufficientData = 0;
+    const insufficientSample: string[] = [];
     const sample: Array<{ email: string; score: number; reason: string }> = [];
 
     for (const contact of contacts) {
@@ -130,6 +150,15 @@ export const scoreLeadQuality: OperationEntry = {
 
       const decision = evaluateSkipIf(skipRule, contact as Record<string, unknown>);
       if (decision.skip) { skipped++; continue; }
+
+      // Pre-flight: a record with no persona grounding can't be scored and reliably
+      // aborts the model. Surface it as its own outcome (enrich, then re-score).
+      if (!hasScorableData(contact)) {
+        insufficientData++;
+        if (insufficientSample.length < 5) insufficientSample.push(contact.email);
+        logger.info("Skipping contact with insufficient data to score", { email: contact.email });
+        continue;
+      }
 
       const company = contact.company_domain ? await getCompany(contact.company_domain) : null;
 
@@ -231,8 +260,8 @@ ${recordContext}`,
       operation: "score.lead-quality",
       dryRun: context.dryRun,
       status: "live",
-      summary: `Scored ${scored} of ${contacts.length} contacts (${skipped} skipped, ${failed} failed).`,
-      metrics: { records_scanned: contacts.length, records_updated: scored, skipped, failed, sample },
+      summary: `Scored ${scored} of ${contacts.length} contacts (${skipped} skipped, ${insufficientData} insufficient data, ${failed} failed).`,
+      metrics: { records_scanned: contacts.length, records_updated: scored, skipped, insufficient_data: insufficientData, insufficient_data_sample: insufficientSample, failed, sample },
     };
   },
 };
