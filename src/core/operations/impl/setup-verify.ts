@@ -14,6 +14,8 @@ interface VerifyReport {
   guidelines_in_org: number;
   missing_collections: string[];
   missing_guidelines: string[];
+  mcps: Array<{ name: string; connected: boolean; registered: boolean; error?: string }>;
+  mcp_warnings: string[];
 }
 
 async function listManifestSlugs(dir: string, ext: ".json" | ".md"): Promise<string[]> {
@@ -41,6 +43,8 @@ export const setupVerify: OperationEntry = {
       guidelines_in_org: 0,
       missing_collections: [],
       missing_guidelines: [],
+      mcps: [],
+      mcp_warnings: [],
     };
 
     // 1. Auth check via client.me()
@@ -94,8 +98,35 @@ export const setupVerify: OperationEntry = {
     const localGuidelineFiles = await listManifestSlugs(coreGuidelinesDir, ".md");
     report.missing_guidelines = localGuidelineFiles.filter((name) => !orgGuidelineNames.has(name));
 
+    // 4. MCP health — research subagents silently fail if their web-search MCP is
+    // registered-but-not-connected (or never registered). Surface it in preflight.
+    const { verifyMcps } = await import("../../setup/register-mcps.js");
+    const mcpStatuses = await verifyMcps().catch((error) => {
+      logger.warn("MCP verify failed", { error: error instanceof Error ? error.message : String(error) });
+      return [] as Awaited<ReturnType<typeof verifyMcps>>;
+    });
+    report.mcps = mcpStatuses.map(({ name, connected, registered, error }) => ({
+      name,
+      connected,
+      registered,
+      error,
+    }));
+    for (const m of mcpStatuses) {
+      if (m.registered && !m.connected) {
+        report.mcp_warnings.push(`${m.name} is registered but not connected — research ops will fail (${m.error ?? "no tools"}).`);
+      } else if (!m.registered && m.connected) {
+        report.mcp_warnings.push(`${m.name} connects but is not registered — run 'npm run setup' (non-dry-run) to register it.`);
+      }
+    }
+    const connectedMcps = mcpStatuses.filter((m) => m.connected).length;
+
+    const mcpSummary =
+      mcpStatuses.length === 0
+        ? ""
+        : ` ${connectedMcps}/${mcpStatuses.length} search MCPs connected${report.mcp_warnings.length ? ` (${report.mcp_warnings.length} warnings)` : ""}.`;
+
     const summary = report.auth
-      ? `Auth OK${report.org ? ` (${report.org})` : ""}. ${report.collections_in_org} collections, ${report.guidelines_in_org} guidelines in org. Missing: ${report.missing_collections.length} collections, ${report.missing_guidelines.length} guidelines.`
+      ? `Auth OK${report.org ? ` (${report.org})` : ""}. ${report.collections_in_org} collections, ${report.guidelines_in_org} guidelines in org. Missing: ${report.missing_collections.length} collections, ${report.missing_guidelines.length} guidelines.${mcpSummary}`
       : "Auth failed — check PERSONIZE_SECRET_KEY.";
 
     return {
