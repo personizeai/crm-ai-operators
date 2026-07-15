@@ -65,8 +65,9 @@ export const generateMeetingBrief: OperationEntry = {
   run_mode: "on-decision",
   guidelines_required: REQUIRED_GUIDELINES,
   run: async (input, context) => {
-    const inputObj = (input ?? {}) as { contact_email?: string; meeting_at?: string };
-    const contactEmail = inputObj.contact_email;
+    const inputObj = (input ?? {}) as { contact_email?: string; email?: string; meeting_at?: string };
+    // Dispatcher per-record/chain routes send `email`; standalone/CLI callers may pass `contact_email`.
+    const contactEmail = inputObj.email ?? inputObj.contact_email;
 
     if (!contactEmail) {
       return {

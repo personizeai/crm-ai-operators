@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
+import { retrieveRecord } from "../../lib/recall.js";
 import { setProperty } from "../../lib/persist.js";
 import { ai } from "../../lib/ai.js";
-import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
+import { type Filter } from "../../lib/filter.js";
+import { resolveOperationRecords } from "../../lib/dispatch-input.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
@@ -71,17 +72,6 @@ function hasScorableData(contact: ContactRecord): boolean {
       (Array.isArray(interests) && interests.length > 0),
   );
 }
-
-async function listContacts(filter: Filter): Promise<ContactRecord[]> {
-  const compiled = compileFilter(filter);
-  return (await retrieveRecords({
-    type: "contact",
-    conditions: compiled.conditions,
-    logic: compiled.logic,
-    limit: compiled.limit,
-  })) as ContactRecord[];
-}
-
 async function getCompany(domain: string): Promise<CompanyRecord | null> {
   return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as CompanyRecord | null;
 }
@@ -119,8 +109,6 @@ export const scoreLeadQuality: OperationEntry = {
   guidelines_required: REQUIRED_GUIDELINES,
   skip_if: { property: "ai_score", updated_within: "7d" },
   run: async (input, context) => {
-    const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
-
     const guidelines = await loadGuidelines(REQUIRED_GUIDELINES);
     const missing = missingGuidelines(guidelines);
     if (missing.length > 0) {
@@ -134,7 +122,14 @@ export const scoreLeadQuality: OperationEntry = {
       };
     }
 
-    const contacts = await listContacts(filter);
+    // Honor the dispatcher's input contract (batch records / per-record email)
+    // before falling back to our own DEFAULT_FILTER.
+    const contacts = (await resolveOperationRecords({
+      input,
+      type: "contact",
+      defaultFilter: DEFAULT_FILTER,
+      singleKey: "email",
+    })) as ContactRecord[];
     logger.info("score.lead-quality: contacts loaded", { count: contacts.length });
 
     const skipRule = scoreLeadQuality.skip_if!;

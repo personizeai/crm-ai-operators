@@ -113,4 +113,11 @@ npm run setup -- --crm hubspot
 npm run setup:webhooks
 ```
 
-After that, normal code changes go through GitHub. A push to the connected branch redeploys the engine. Orchestration changes that live in `dispatch-routes` do not require a deploy; update the route records and the dispatcher picks them up on the next cycle.
+After that, two independent lanes run off the same `git push`:
+
+- **Code** (`src/**`) — a push to the connected branch redeploys the engine via Railway/Render's own GitHub auto-deploy.
+- **Content** (`manifests/**`: guidelines, collections, entity types, graph relations, and dispatch routes) — a push touching `manifests/**` triggers [`.github/workflows/publish-content.yml`](../.github/workflows/publish-content.yml), which runs `setup:diff` then `setup apply` against Personize using a repo secret. This never rebuilds or redeploys the engine service; the dispatcher reads guidelines and dispatch routes fresh from Personize on every cycle, so the change is live on the next cycle with no restart.
+
+Dispatch routes are authored as manifest files under `manifests/core/dispatch-routes/*.json` — one route per file, same pattern as guidelines. See [docs/DISPATCH-ROUTES.md](DISPATCH-ROUTES.md) for the authoring guide and an important caveat on which `target_type` values actually work against the current operations catalog.
+
+Set up the Action once: add `PERSONIZE_SECRET_KEY` (and `PERSONIZE_CRM_CONNECTION_ID` if applicable) as repo secrets under a `production` environment. After that, publishing content is just editing a file and pushing — no server visit, ever.

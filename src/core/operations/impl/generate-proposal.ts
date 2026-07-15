@@ -26,6 +26,8 @@ const ProposalOutputSchema = z.object({
 
 interface DealInput {
   contact_email?: string;
+  /** Dispatcher per-record/chain routes send the identity as `email`; standalone callers may use `contact_email`. */
+  email?: string;
   company_domain?: string;
   deal?: {
     amount?: number;
@@ -80,7 +82,7 @@ export const generateProposal: OperationEntry = {
   guidelines_required: REQUIRED_GUIDELINES,
   run: async (input, context) => {
     const inputObj = (input ?? {}) as DealInput;
-    const contactEmail = inputObj.contact_email;
+    const contactEmail = inputObj.email ?? inputObj.contact_email;
     const companyDomain = inputObj.company_domain;
     const deal = inputObj.deal ?? {};
 

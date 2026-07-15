@@ -1,0 +1,20 @@
+{
+  "route_id": "route_precall_meeting_prep",
+  "priority": 30,
+  "name": "precall-meeting-prep",
+  "description": "For contacts flagged with an upcoming meeting, generate a pre-call brief. Per-record so each contact's brief is built from that contact's own context; generate.meeting-brief resolves the single contact via input.email (meeting_at is optional).",
+  "enabled": true,
+  "filter": {
+    "collection": "contact",
+    "where": {
+      "next_meeting_at": { "exists": true }
+    },
+    "limit": 50
+  },
+  "target_type": "operation",
+  "target_name": "generate.meeting-brief",
+  "max_per_cycle": 20,
+  "parallel": true,
+  "concurrency": 5,
+  "tier_override": "pro"
+}

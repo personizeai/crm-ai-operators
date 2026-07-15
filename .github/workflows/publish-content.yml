@@ -1,0 +1,48 @@
+name: Publish Content
+
+# Publishes manifests/** (guidelines, collections, entity types, graph relations,
+# dispatch routes) into Personize whenever they change on main. This is the
+# "content" lane: it never rebuilds or redeploys the engine — the dispatcher
+# reads guidelines and dispatch routes fresh from Personize every cycle, so a
+# push here takes effect on the next dispatch without touching the running
+# service. Engine code changes (src/**) redeploy separately via the connected
+# Railway/Render auto-deploy, untouched by this workflow.
+#
+# Requires repo secrets: PERSONIZE_SECRET_KEY (required),
+# PERSONIZE_CRM_CONNECTION_ID (optional, only if the org has more than one CRM
+# connection). Runs setup:diff first so the log always shows what changed;
+# setup:apply is the actual publish and only runs on push to main, not on PRs
+# (fork PRs don't receive repo secrets, and a diff-only preview needs a live
+# Personize key anyway).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "manifests/**"
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    name: Publish manifests to Personize
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PERSONIZE_MODE: hosted
+      PERSONIZE_SECRET_KEY: ${{ secrets.PERSONIZE_SECRET_KEY }}
+      PERSONIZE_CRM_CONNECTION_ID: ${{ secrets.PERSONIZE_CRM_CONNECTION_ID }}
+      # This job's entire purpose is to publish; DRY_RUN=false only affects
+      # setup.apply's writes (guidelines/collections/dispatch-routes upserts and
+      # CRM custom-property provisioning) — it does not touch CRM record data.
+      DRY_RUN: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Show what would change
+        run: npm run setup:diff -- --crm hubspot
+      - name: Publish
+        run: npm run setup -- --crm hubspot

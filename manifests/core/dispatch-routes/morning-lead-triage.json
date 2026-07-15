@@ -1,0 +1,19 @@
+{
+  "route_id": "route_morning_lead_triage",
+  "priority": 10,
+  "name": "morning-lead-triage",
+  "description": "Score contacts not scored in the last day against the ICP + lead-scoring guidelines. Per-record parallel so each contact scores independently (one failure isolated) — the doc-recommended shape for scoring. score.lead-quality resolves the single contact via input.email, honoring this route's staleness filter.",
+  "enabled": true,
+  "filter": {
+    "collection": "contact",
+    "where": {
+      "ai_score_updated_at": { "lt": "now-1d" }
+    },
+    "limit": 100
+  },
+  "target_type": "operation",
+  "target_name": "score.lead-quality",
+  "max_per_cycle": 50,
+  "parallel": true,
+  "concurrency": 8
+}

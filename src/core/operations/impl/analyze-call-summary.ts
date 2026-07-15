@@ -36,6 +36,15 @@ interface ConversationRecord {
   [key: string]: unknown;
 }
 
+// Idempotency guard: drop calls/meetings this operation already processed.
+// Applied to both self-recalled and dispatcher-preloaded (batch) record sets.
+function excludeProcessed(records: ConversationRecord[]): ConversationRecord[] {
+  return records.filter((c) => {
+    const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
+    return !processed.includes(PROCESSOR_TAG);
+  });
+}
+
 async function getUnprocessedCalls(): Promise<ConversationRecord[]> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const [calls, meetings] = await Promise.all([
@@ -59,10 +68,7 @@ async function getUnprocessedCalls(): Promise<ConversationRecord[]> {
     }) as Promise<ConversationRecord[]>,
   ]);
 
-  return [...calls, ...meetings].filter((c) => {
-    const processed = Array.isArray(c.processed_by) ? c.processed_by : [];
-    return !processed.includes(PROCESSOR_TAG);
-  });
+  return excludeProcessed([...calls, ...meetings]);
 }
 
 async function appendSignal(contactEmail: string, signal: string): Promise<void> {
@@ -104,7 +110,10 @@ export const analyzeCallSummary: OperationEntry = {
       };
     }
 
-    const calls = await getUnprocessedCalls();
+    // Batch dispatch preloads the route's records; otherwise self-recall. Either
+    // way, excludeProcessed enforces idempotency.
+    const preloaded = (input as { records?: ConversationRecord[] } | undefined)?.records;
+    const calls = Array.isArray(preloaded) ? excludeProcessed(preloaded) : await getUnprocessedCalls();
     logger.info("analyze.call-summary: unprocessed calls/meetings loaded", { count: calls.length });
 
     if (calls.length === 0) {

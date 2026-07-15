@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { retrieveRecords } from "../../lib/recall.js";
 import { setProperty, setProperties } from "../../lib/persist.js";
 import { ai, type Tier } from "../../lib/ai.js";
-import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
+import { type Filter } from "../../lib/filter.js";
+import { resolveOperationRecords } from "../../lib/dispatch-input.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
@@ -47,16 +47,6 @@ interface CompanyRecord {
   industry?: string;
   lifecycle_stage?: string;
   [key: string]: unknown;
-}
-
-async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
-  const compiled = compileFilter(filter);
-  return (await retrieveRecords({
-    type: "company",
-    conditions: compiled.conditions,
-    logic: compiled.logic,
-    limit: compiled.limit,
-  })) as CompanyRecord[];
 }
 
 async function persistFindings(domain: string, output: ResearchOutput): Promise<void> {
@@ -117,8 +107,6 @@ export const researchAccountDeepDive: OperationEntry = {
   requires: ["subagent"], // autonomous web research — hosted only until gateway subagent lands
   skip_if: { property: "context", updated_within: "30d" },
   run: async (input, context) => {
-    const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
-
     const guideline = await loadGuideline("account-research");
     if (!guideline) {
       return buildScaffold(
@@ -136,7 +124,12 @@ export const researchAccountDeepDive: OperationEntry = {
       );
     }
 
-    const candidates = await listCompanies(filter);
+    const candidates = (await resolveOperationRecords({
+      input,
+      type: "company",
+      defaultFilter: DEFAULT_FILTER,
+      singleKey: "recordId",
+    })) as CompanyRecord[];
     logger.info("research.account-deep-dive: candidates loaded", { count: candidates.length });
 
     const skipRule = researchAccountDeepDive.skip_if!;

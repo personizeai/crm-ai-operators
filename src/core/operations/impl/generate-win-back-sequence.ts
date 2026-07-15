@@ -2,7 +2,8 @@ import { z } from "zod";
 import { retrieveRecords, retrieveRecord } from "../../lib/recall.js";
 import { ai } from "../../lib/ai.js";
 import { addBusinessDays, isoDate } from "../../lib/dates.js";
-import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
+import { type Filter } from "../../lib/filter.js";
+import { resolveOperationRecords } from "../../lib/dispatch-input.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
@@ -52,15 +53,6 @@ interface CompanyRecord {
   [key: string]: unknown;
 }
 
-async function listContacts(filter: Filter): Promise<ContactRecord[]> {
-  const compiled = compileFilter(filter);
-  return (await retrieveRecords({
-    type: "contact",
-    conditions: compiled.conditions,
-    logic: compiled.logic,
-    limit: compiled.limit,
-  })) as ContactRecord[];
-}
 
 async function getCompany(domain: string): Promise<CompanyRecord | null> {
   return (await retrieveRecord({ websiteUrl: domain, type: "company" })) as CompanyRecord | null;
@@ -87,7 +79,6 @@ export const generateWinBackSequence: OperationEntry = {
   guidelines_required: REQUIRED_GUIDELINES,
   skip_if: { property: "sequence_status", in_states: ["Active", "Replied", "Opted Out", "Bounced"] },
   run: async (input, context) => {
-    const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
     const inputObj = (input ?? {}) as { campaign_id?: string };
     const campaignId = inputObj.campaign_id ?? "win-back";
 
@@ -104,7 +95,12 @@ export const generateWinBackSequence: OperationEntry = {
       };
     }
 
-    const contacts = await listContacts(filter);
+    const contacts = (await resolveOperationRecords({
+      input,
+      type: "contact",
+      defaultFilter: DEFAULT_FILTER,
+      singleKey: "email",
+    })) as ContactRecord[];
     logger.info("generate.win-back-sequence: candidates loaded", { count: contacts.length });
 
     const skipRule = generateWinBackSequence.skip_if!;

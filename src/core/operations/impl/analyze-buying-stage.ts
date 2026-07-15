@@ -2,7 +2,8 @@ import { z } from "zod";
 import { setProperty } from "../../lib/persist.js";
 import { retrieveRecords } from "../../lib/recall.js";
 import { ai } from "../../lib/ai.js";
-import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
+import { type Filter } from "../../lib/filter.js";
+import { resolveOperationRecords } from "../../lib/dispatch-input.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
@@ -42,15 +43,6 @@ interface ContactRecord {
   [key: string]: unknown;
 }
 
-async function listContacts(filter: Filter): Promise<ContactRecord[]> {
-  const compiled = compileFilter(filter);
-  return (await retrieveRecords({
-    type: "contact",
-    conditions: compiled.conditions,
-    logic: compiled.logic,
-    limit: compiled.limit,
-  })) as ContactRecord[];
-}
 
 async function getRecentActivity(email: string): Promise<{ conversations: unknown[]; signals: unknown[] }> {
   const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
@@ -88,8 +80,6 @@ export const analyzeBuyingStage: OperationEntry = {
   guidelines_required: REQUIRED_GUIDELINES,
   skip_if: { property: "buying_stage", updated_within: "14d" },
   run: async (input, context) => {
-    const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
-
     const guidelines = await loadGuidelines(REQUIRED_GUIDELINES);
     const missing = missingGuidelines(guidelines);
     if (missing.length > 0) {
@@ -103,7 +93,12 @@ export const analyzeBuyingStage: OperationEntry = {
       };
     }
 
-    const contacts = await listContacts(filter);
+    const contacts = (await resolveOperationRecords({
+      input,
+      type: "contact",
+      defaultFilter: DEFAULT_FILTER,
+      singleKey: "email",
+    })) as ContactRecord[];
     logger.info("analyze.buying-stage: contacts loaded", { count: contacts.length });
 
     const skipRule = analyzeBuyingStage.skip_if!;

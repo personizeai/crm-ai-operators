@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { retrieveRecords } from "../../lib/recall.js";
 import { ai } from "../../lib/ai.js";
-import { compileFilter, parseFilterInput, type Filter } from "../../lib/filter.js";
+import { type Filter } from "../../lib/filter.js";
+import { resolveOperationRecords } from "../../lib/dispatch-input.js";
 import { loadGuideline } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateSkipIf } from "../../lib/skip-if.js";
@@ -55,16 +55,6 @@ function hasScorableData(company: CompanyRecord): boolean {
   );
 }
 
-async function listCompanies(filter: Filter): Promise<CompanyRecord[]> {
-  const compiled = compileFilter(filter);
-  return (await retrieveRecords({
-    type: "company",
-    conditions: compiled.conditions,
-    logic: compiled.logic,
-    limit: compiled.limit,
-  })) as CompanyRecord[];
-}
-
 // Personize sync (icp_fit_score/icp_fit_reason) is handled by serverOutputs on the
 // ai() call — including the client-side fallback in private mode. This mirrors the
 // scores to the CRM record's personize_* fields so reps see them in HubSpot.
@@ -98,7 +88,6 @@ export const scoreIcpFit: OperationEntry = {
   guidelines_required: ["icp-definition"],
   skip_if: { property: "icp_fit_score", updated_within: "7d" },
   run: async (input, context) => {
-    const filter = parseFilterInput(input) ?? DEFAULT_FILTER;
     const skipIf = (input as { skip_if?: { updated_within?: string } } | undefined)?.skip_if;
 
     // 1. Load governance: the ICP definition guideline.
@@ -120,9 +109,16 @@ export const scoreIcpFit: OperationEntry = {
       );
     }
 
-    // 2. Pull candidate companies.
-    const candidates = await listCompanies(filter);
-    logger.info("Score.icp-fit: candidates loaded", { count: candidates.length, filter });
+    // 2. Pull candidate companies — honoring the dispatcher's input contract
+    //    (batch records / per-record identity) before our own DEFAULT_FILTER.
+    //    Company per-record identity is the record_id (extractEmail's fallback).
+    const candidates = (await resolveOperationRecords({
+      input,
+      type: "company",
+      defaultFilter: DEFAULT_FILTER,
+      singleKey: "recordId",
+    })) as CompanyRecord[];
+    logger.info("Score.icp-fit: candidates loaded", { count: candidates.length });
 
     // 3. Score each, respecting skip_if.
     const skipRule = scoreIcpFit.skip_if!;
