@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "note": "Regression cases derived from real production incident classes, rewritten with fictional names. Each case: input, context, config overrides, expected enforced text and expected fire guards.",
+  "note": "Regression cases derived from real production incident classes, rewritten with fictional names. Each case: input, context, config overrides, expected enforced text and expected fire guards. Future-dated signal rejection is pinned by unit tests of the recency helper, which applyGuards does not call.",
   "config": {
     "format_version": 1,
     "mode": "enforce",
@@ -23,9 +23,10 @@
       "expect_guards": ["ownership"]
     },
     {
-      "name": "evaluating-stays-unconfirmed",
+      "name": "unconfirmed-claim-whole-text-drop",
       "input": "Your team already uses Acme Backup across sites.",
       "context": { "ownershipConfirmed": false },
+      "expect_text": "",
       "expect_guards": ["ownership"]
     },
     {

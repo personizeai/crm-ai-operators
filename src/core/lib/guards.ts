@@ -70,6 +70,10 @@ export function filterSignalRecency<T extends { date?: string }>(
     .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
 }
 
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+
 export function validateGuardConfig(input: unknown): string[] {
   const errors: string[] = [];
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -81,19 +85,44 @@ export function validateGuardConfig(input: unknown): string[] {
     errors.push('mode: must be off, shadow, or enforce');
   }
   const bp = c['banned_phrases'];
-  if (bp !== undefined && (typeof bp !== 'object' || bp === null || Array.isArray(bp))) {
-    errors.push('banned_phrases: must be an object of phrase to replacement');
+  if (bp !== undefined) {
+    if (typeof bp !== 'object' || bp === null || Array.isArray(bp)) {
+      errors.push('banned_phrases: must be an object of phrase to replacement');
+    } else if (!Object.values(bp as Record<string, unknown>).every((v) => typeof v === 'string')) {
+      errors.push('banned_phrases: all values must be strings');
+    }
   }
   const own = c['ownership'];
   if (own !== undefined) {
     if (typeof own !== 'object' || own === null || Array.isArray(own)) {
       errors.push('ownership: must be an object');
-    } else if (!Array.isArray((own as Record<string, unknown>)['vendor_terms'])) {
-      errors.push('ownership.vendor_terms: must be an array');
+    } else {
+      const o = own as Record<string, unknown>;
+      if (!isStringArray(o['vendor_terms'])) {
+        errors.push('ownership.vendor_terms: must be an array of strings');
+      }
+      if (o['ownership_verbs'] !== undefined && !isStringArray(o['ownership_verbs'])) {
+        errors.push('ownership.ownership_verbs: must be an array of strings');
+      }
+      if (o['negation_cues'] !== undefined && !isStringArray(o['negation_cues'])) {
+        errors.push('ownership.negation_cues: must be an array of strings');
+      }
+      if (o['confirm_pattern'] !== undefined && typeof o['confirm_pattern'] !== 'string') {
+        errors.push('ownership.confirm_pattern: must be a string');
+      }
     }
   }
-  if (c['recency_months'] !== undefined && typeof c['recency_months'] !== 'number') {
-    errors.push('recency_months: must be a number');
+  if (c['test_identity_denylist'] !== undefined && !isStringArray(c['test_identity_denylist'])) {
+    errors.push('test_identity_denylist: must be an array of strings');
+  }
+  if (c['forbid_recipient_name'] !== undefined && typeof c['forbid_recipient_name'] !== 'boolean') {
+    errors.push('forbid_recipient_name: must be a boolean');
+  }
+  if (c['recency_months'] !== undefined) {
+    const rm = c['recency_months'];
+    if (typeof rm !== 'number' || !Number.isFinite(rm) || rm <= 0) {
+      errors.push('recency_months: must be a positive finite number');
+    }
   }
   return errors;
 }
@@ -122,8 +151,32 @@ export function coerceOutputText(text: string): string {
 
 // --- sentence utilities (shared by ownership and placeholder guards) ---
 
+// deliberately simple sentence splitter; abbreviations like "Inc." split early,
+// a known limitation accepted for v1
 function splitSentences(text: string): string[] {
   return text.split(/(?<=[.!?])\s+/);
+}
+
+// splits into [sentence, separator, sentence, separator, ...] keeping the
+// separators, so dropping a sentence removes only its own trailing
+// separator and paragraph breaks between kept sentences survive intact
+function dropSentences(
+  text: string,
+  shouldDrop: (sentence: string) => boolean
+): { result: string; droppedAny: boolean } {
+  const parts = text.split(/((?<=[.!?])\s+)/);
+  let result = '';
+  let droppedAny = false;
+  for (let i = 0; i < parts.length; i += 2) {
+    const sentence = parts[i] ?? '';
+    const sep = parts[i + 1] ?? '';
+    if (sentence !== '' && shouldDrop(sentence)) {
+      droppedAny = true;
+      continue;
+    }
+    result += sentence + sep;
+  }
+  return { result: droppedAny ? result.trimEnd() : text, droppedAny };
 }
 
 function containsTerm(sentence: string, terms: string[]): string | null {
@@ -168,7 +221,8 @@ export function hasPositiveVendorSignal(text: string, ownership: OwnershipConfig
 }
 
 function preserveCapital(original: string, replacement: string): string {
-  if (original.length > 0 && replacement.length > 0 && original[0] === original[0]?.toUpperCase()) {
+  if (!/[A-Za-z]/.test(original[0] ?? '')) return replacement;
+  if (replacement.length > 0 && original[0] === original[0]?.toUpperCase()) {
     return replacement[0]!.toUpperCase() + replacement.slice(1);
   }
   return replacement;
@@ -187,18 +241,21 @@ const PLACEHOLDER = /\[[A-Z][A-Z0-9 _-]*\](?!\()/;
 export function applyGuards(text: string, config: GuardConfig, context: GuardContext = {}): GuardResult {
   const fires: GuardFire[] = [];
   const source = context.configSource ?? 'default';
-  let out = coerceOutputText(text);
-  if (out !== text) fires.push({ guard: 'coerce', rule: 'wrapper', action: 'rewrite', source });
+  const coerced = coerceOutputText(text);
+  // pure whitespace trims are not a meaningful rewrite; only record the fire
+  // when coercion actually stripped a wrapper (code fence or JSON envelope)
+  if (coerced !== text.trim()) {
+    fires.push({ guard: 'coerce', rule: 'wrapper', action: 'rewrite', source });
+  }
+  let out = coerced;
   if (config.mode === 'off') return { text: out, fires };
-  // guards below are added in later tasks; each pushes fires and, in
-  // enforce mode only, mutates `out`
+  // each guard pushes fires and, in enforce mode only, may rewrite 'out'
   out = runBannedPhrases(out, config, fires, source);
   out = runOwnership(out, config, context, fires, source);
-  out = runLeakGuards(out, config, context, fires, source);
+  out = runLeakGuards(out, config, context, fires, source, coerced);
   return { text: out, fires };
 }
 
-// Task 3 and Task 4 replace these stubs with real implementations.
 function runBannedPhrases(text: string, config: GuardConfig, fires: GuardFire[], source: string): string {
   const map = config.banned_phrases;
   if (!map) return text;
@@ -216,6 +273,11 @@ function runBannedPhrases(text: string, config: GuardConfig, fires: GuardFire[],
       out = out.replace(new RegExp(escapeRegExp(phrase), 'gi'), (m) =>
         preserveCapital(m, map[phrase] ?? '')
       );
+      if (map[phrase] === '') {
+        // the phrase was deleted outright, not swapped for another word;
+        // collapse the doubled space that leaves behind on the same line
+        out = out.replace(/[^\S\r\n]{2,}/g, ' ');
+      }
     }
   }
   return out;
@@ -233,41 +295,53 @@ function runOwnership(
   const verbs = (own.ownership_verbs?.length ? own.ownership_verbs : [...DEFAULT_OWNERSHIP_VERBS])
     .map((v) => v.toLowerCase())
     .filter((v) => v.trim() !== '');
-  const sentences = splitSentences(text);
-  const kept: string[] = [];
-  let dropped = false;
-  for (const sentence of sentences) {
+  const sentenceClaims = (sentence: string): boolean => {
+    const term = containsTerm(sentence, own.vendor_terms);
+    return term !== null && verbs.some((v) => sentence.toLowerCase().includes(v));
+  };
+  for (const sentence of splitSentences(text)) {
     const term = containsTerm(sentence, own.vendor_terms);
     const lower = sentence.toLowerCase();
     const claims = term !== null && verbs.some((v) => lower.includes(v));
-    if (!claims) {
-      kept.push(sentence);
-      continue;
-    }
+    if (!claims) continue;
     const action = config.mode === 'enforce' ? 'drop_sentence' : 'note';
     fires.push({ guard: 'ownership', rule: `${term} + ownership verb`, action, source });
-    if (config.mode !== 'enforce') kept.push(sentence);
-    else dropped = true;
   }
-  return dropped ? kept.join(' ') : text;
+  if (config.mode !== 'enforce') return text;
+  const { result, droppedAny } = dropSentences(text, sentenceClaims);
+  return droppedAny ? result : text;
 }
 function runLeakGuards(
   text: string,
   config: GuardConfig,
   context: GuardContext,
   fires: GuardFire[],
-  source: string
+  source: string,
+  original: string
 ): string {
   let out = text;
   if (config.forbid_recipient_name && context.recipientName) {
     const name = context.recipientName.trim();
     if (name) {
-      const re = new RegExp(`\\s*\\b${escapeRegExp(name)}\\b`, 'g');
+      // case-sensitive on purpose: a case-insensitive strip would delete
+      // ordinary words for recipients named Will, Mark, or Grace;
+      // test_identity below is case-insensitive because it only notes and
+      // never rewrites
+      const re = new RegExp(
+        `[^\\S\\r\\n]*(?<![\\p{L}\\p{N}_])${escapeRegExp(name)}(?![\\p{L}\\p{N}_])`,
+        'gu'
+      );
       if (re.test(out)) {
         const action = config.mode === 'enforce' ? 'rewrite' : 'note';
         fires.push({ guard: 'name_leak', rule: 'recipient name', action, source });
         if (config.mode === 'enforce') {
-          out = out.replace(re, '').replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
+          out = out
+            .replace(re, '')
+            .replace(/[^\S\r\n]{2,}/g, ' ')
+            .replace(/\s+,/g, ',')
+            .replace(/,\s*(?=[.!?])/g, '')
+            .replace(/(^|[\r\n])[ \t]*,[ \t]*/g, '$1')
+            .trim();
         }
       }
     }
@@ -276,15 +350,14 @@ function runLeakGuards(
     const action = config.mode === 'enforce' ? 'drop_sentence' : 'note';
     fires.push({ guard: 'placeholder_leak', rule: 'unfilled bracket token', action, source });
     if (config.mode === 'enforce') {
-      out = splitSentences(out)
-        .filter((s) => !PLACEHOLDER.test(s))
-        .join(' ');
+      const { result, droppedAny } = dropSentences(out, (s) => PLACEHOLDER.test(s));
+      out = droppedAny ? result : out;
     }
   }
   for (const identity of config.test_identity_denylist ?? []) {
-    // audit-only detector: scan the ORIGINAL input so an earlier guard's
-    // sentence drop cannot suppress the incident signal
-    if (identity && text.toLowerCase().includes(identity.toLowerCase())) {
+    // audit-only detector: scans the post-coercion original, so no later
+    // guard's sentence drop can suppress the incident signal
+    if (identity && original.toLowerCase().includes(identity.toLowerCase())) {
       fires.push({ guard: 'test_identity', rule: identity, action: 'note', source });
     }
   }

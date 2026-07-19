@@ -27,6 +27,36 @@ test('validateGuardConfig rejects bad mode and bad shapes', () => {
   );
 });
 
+test('validateGuardConfig rejects configs that would crash or corrupt applyGuards', () => {
+  assert.ok(
+    validateGuardConfig({ format_version: 1, mode: 'off', banned_phrases: { seamless: 7 } }).some((e) =>
+      e.includes('banned_phrases')
+    )
+  );
+  assert.ok(
+    validateGuardConfig({
+      format_version: 1,
+      mode: 'off',
+      ownership: { vendor_terms: ['Acme Backup', 7] }
+    }).some((e) => e.includes('ownership.vendor_terms'))
+  );
+  assert.ok(
+    validateGuardConfig({ format_version: 1, mode: 'off', test_identity_denylist: 'Sarah Chen' }).some(
+      (e) => e.includes('test_identity_denylist')
+    )
+  );
+  assert.ok(
+    validateGuardConfig({ format_version: 1, mode: 'off', recency_months: -3 }).some((e) =>
+      e.includes('recency_months')
+    )
+  );
+  assert.ok(
+    validateGuardConfig({ format_version: 1, mode: 'off', forbid_recipient_name: 'yes' }).some((e) =>
+      e.includes('forbid_recipient_name')
+    )
+  );
+});
+
 test('coerceOutputText unwraps a single-string-value JSON object', () => {
   assert.equal(coerceOutputText('{"value": "Hello there."}'), 'Hello there.');
   assert.equal(coerceOutputText('{"text": "Hi."}'), 'Hi.');
@@ -236,6 +266,7 @@ test('incident fixtures replay through applyGuards', () => {
       expect_guards: string[];
     }[];
   };
+  assert.deepEqual(validateGuardConfig(fx.config), []);
   for (const c of fx.cases) {
     const r = applyGuards(c.input, fx.config, c.context as never);
     if (c.expect_text !== undefined) {
@@ -263,4 +294,54 @@ test('test identity fire survives a placeholder sentence drop', () => {
   assert.equal(r.text, 'Talk soon.');
   assert.ok(r.fires.some((f) => f.guard === 'placeholder_leak'));
   assert.ok(r.fires.some((f) => f.guard === 'test_identity'));
+});
+
+test('multi-paragraph enforce: placeholder drop preserves paragraph breaks around it', () => {
+  const cfg: GuardConfig = { format_version: 1, mode: 'enforce' };
+  const text =
+    'Paragraph one stands alone.\n\nOur [CAPABILITY_1] fits here.\n\nParagraph three stands alone.';
+  const r = applyGuards(text, cfg);
+  assert.equal(r.text, 'Paragraph one stands alone.\n\nParagraph three stands alone.');
+});
+
+test('name leak: non-ASCII recipient name is stripped via unicode boundaries', () => {
+  const cfg: GuardConfig = { format_version: 1, mode: 'enforce', forbid_recipient_name: true };
+  const r = applyGuards('Hola José, saludos desde Northwind.', cfg, { recipientName: 'José' });
+  assert.equal(r.text, 'Hola, saludos desde Northwind.');
+  assert.ok(r.fires.some((f) => f.guard === 'name_leak'));
+});
+
+test('all guards combined: one call triggers banned_phrases, ownership, name_leak, placeholder_leak, and test_identity', () => {
+  const cfg: GuardConfig = {
+    format_version: 1,
+    mode: 'enforce',
+    banned_phrases: { revolutionize: 'improve' },
+    ownership: {
+      vendor_terms: ['Acme Backup'],
+      ownership_verbs: ['already uses'],
+      negation_cues: ['evaluating', 'considering', 'not yet', 'no '],
+      confirm_pattern: '(uses|deployed|standardized on) Acme Backup'
+    },
+    forbid_recipient_name: true,
+    test_identity_denylist: ['Sarah Chen']
+  };
+  const text =
+    'We will revolutionize your archive costs.\n\n' +
+    'Your team already uses Acme Backup daily.\n\n' +
+    'Hi Jordan, quick thought on Northwind.\n\n' +
+    'Our [CAPABILITY_1] fits your stack.\n\n' +
+    'Reach out to Sarah Chen for access.';
+  const r = applyGuards(text, cfg, { recipientName: 'Jordan', ownershipConfirmed: false });
+  assert.equal(
+    r.text,
+    'We will improve your archive costs.\n\nHi, quick thought on Northwind.\n\nReach out to Sarah Chen for access.'
+  );
+  const guardNames = [...new Set(r.fires.map((f) => f.guard))].sort();
+  assert.deepEqual(guardNames, [
+    'banned_phrases',
+    'name_leak',
+    'ownership',
+    'placeholder_leak',
+    'test_identity'
+  ]);
 });
