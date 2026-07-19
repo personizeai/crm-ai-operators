@@ -29,7 +29,7 @@ Production experience with AI outreach shows a stable set of failure classes tha
 | placeholder_leak | unfilled [BRACKET] tokens | drop sentence |
 | test_identity | configured denylist of test identities | note only (audit) |
 
-A separate helper, signal recency filtering (window in months, undated and future-dated entries dropped), is exported for operations that handle structured signal lists.
+A separate helper, signal recency filtering (window in months, undated and future-dated entries dropped, kept newest first), is exported for operations that handle structured signal lists.
 
 ## Configuration
 
@@ -58,7 +58,7 @@ Resolution order: campaign record, then an org default on the orchestrator confi
 - shadow: all guards evaluate and log fires; output is unchanged.
 - enforce: guards rewrite or drop as specified above.
 
-Recommended rollout: shadow for a period, review the fires, tune the data, then enforce. Every fire carries provenance: guard name, matched rule, mode, and which config layer supplied the rule.
+Recommended rollout: shadow for a period, review the fires, tune the data, then enforce. Every fire carries provenance: guard name, matched rule, the action taken, and which config layer supplied the rule.
 
 ## Audit trail
 
