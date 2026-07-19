@@ -51,8 +51,15 @@ export function filterSignalRecency<T extends { date?: string }>(
   months: number,
   now: Date = new Date()
 ): T[] {
+  // month-arithmetic clamp: stepping back N months from a day-29/30/31 date
+  // must not roll over into the same month (setMonth overflow), so target the
+  // month first and clamp the day to that month's length
   const cutoff = new Date(now);
+  const day = cutoff.getDate();
+  cutoff.setDate(1);
   cutoff.setMonth(cutoff.getMonth() - months);
+  const daysInTarget = new Date(cutoff.getFullYear(), cutoff.getMonth() + 1, 0).getDate();
+  cutoff.setDate(Math.min(day, daysInTarget));
   return signals
     .filter((s) => {
       if (!s.date) return false;
@@ -275,7 +282,9 @@ function runLeakGuards(
     }
   }
   for (const identity of config.test_identity_denylist ?? []) {
-    if (identity && out.toLowerCase().includes(identity.toLowerCase())) {
+    // audit-only detector: scan the ORIGINAL input so an earlier guard's
+    // sentence drop cannot suppress the incident signal
+    if (identity && text.toLowerCase().includes(identity.toLowerCase())) {
       fires.push({ guard: 'test_identity', rule: identity, action: 'note', source });
     }
   }

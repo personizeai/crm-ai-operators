@@ -204,14 +204,12 @@ test('placeholder leak: enforce drops the sentence containing the token', () => 
 });
 
 test('test identity: noted in both shadow and enforce, never rewritten', () => {
-  const cfg: GuardConfig = {
-    format_version: 1,
-    mode: 'enforce',
-    test_identity_denylist: ['Sarah Chen']
-  };
-  const r = applyGuards('Ping Sarah Chen for access.', cfg);
-  assert.equal(r.text, 'Ping Sarah Chen for access.');
-  assert.equal(r.fires.find((f) => f.guard === 'test_identity')?.action, 'note');
+  for (const mode of ['shadow', 'enforce'] as const) {
+    const cfg: GuardConfig = { format_version: 1, mode, test_identity_denylist: ['Sarah Chen'] };
+    const r = applyGuards('Ping Sarah Chen for access.', cfg);
+    assert.equal(r.text, 'Ping Sarah Chen for access.');
+    assert.equal(r.fires.find((f) => f.guard === 'test_identity')?.action, 'note');
+  }
 });
 
 test('filterSignalRecency drops undated, future-dated, and stale; sorts newest first', () => {
@@ -247,4 +245,22 @@ test('incident fixtures replay through applyGuards', () => {
       assert.ok(r.fires.some((f) => f.guard === g), `${c.name}: expected fire ${g}`);
     }
   }
+});
+
+test('filterSignalRecency: month-end now does not roll the cutoff forward', () => {
+  const now = new Date('2026-03-31T12:00:00Z');
+  const kept = filterSignalRecency([{ text: 'early-march', date: '2026-03-02' }], 1, now);
+  assert.equal(kept.length, 1);
+});
+
+test('test identity fire survives a placeholder sentence drop', () => {
+  const cfg: GuardConfig = {
+    format_version: 1,
+    mode: 'enforce',
+    test_identity_denylist: ['Sarah Chen']
+  };
+  const r = applyGuards('Reach out to Sarah Chen about our [CAPABILITY_1] rollout. Talk soon.', cfg);
+  assert.equal(r.text, 'Talk soon.');
+  assert.ok(r.fires.some((f) => f.guard === 'placeholder_leak'));
+  assert.ok(r.fires.some((f) => f.guard === 'test_identity'));
 });
