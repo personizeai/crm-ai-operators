@@ -178,8 +178,10 @@ function runBannedPhrases(text: string, config: GuardConfig, fires: GuardFire[],
   const phrases = Object.keys(map).filter((p) => p.trim() !== '');
   phrases.sort((a, b) => b.length - a.length);
   for (const phrase of phrases) {
-    const re = new RegExp(escapeRegExp(phrase), 'gi');
-    if (!re.test(out)) continue;
+    // fire and replace only for phrases present in the ORIGINAL text, so a
+    // replacement value that happens to contain another configured phrase
+    // cannot cascade into a second, unintended substitution or a spurious fire
+    if (!new RegExp(escapeRegExp(phrase), 'i').test(text)) continue;
     const action = config.mode === 'enforce' ? 'rewrite' : 'note';
     fires.push({ guard: 'banned_phrases', rule: phrase, action, source });
     if (config.mode === 'enforce') {
@@ -200,11 +202,12 @@ function runOwnership(
   const own = config.ownership;
   if (!own || own.vendor_terms.length === 0) return text;
   if (context.ownershipConfirmed === true) return text;
-  const verbs = (own.ownership_verbs?.length ? own.ownership_verbs : [...DEFAULT_OWNERSHIP_VERBS]).map(
-    (v) => v.toLowerCase()
-  );
+  const verbs = (own.ownership_verbs?.length ? own.ownership_verbs : [...DEFAULT_OWNERSHIP_VERBS])
+    .map((v) => v.toLowerCase())
+    .filter((v) => v.trim() !== '');
   const sentences = splitSentences(text);
   const kept: string[] = [];
+  let dropped = false;
   for (const sentence of sentences) {
     const term = containsTerm(sentence, own.vendor_terms);
     const lower = sentence.toLowerCase();
@@ -216,8 +219,9 @@ function runOwnership(
     const action = config.mode === 'enforce' ? 'drop_sentence' : 'note';
     fires.push({ guard: 'ownership', rule: `${term} + ownership verb`, action, source });
     if (config.mode !== 'enforce') kept.push(sentence);
+    else dropped = true;
   }
-  return kept.join(' ');
+  return dropped ? kept.join(' ') : text;
 }
 function runLeakGuards(text: string, _c: GuardConfig, _x: GuardContext, _f: GuardFire[], _s: string): string {
   return text;

@@ -146,3 +146,32 @@ test('DEFAULT_OWNERSHIP_VERBS is non-empty and lowercase', () => {
   assert.ok(DEFAULT_OWNERSHIP_VERBS.length >= 5);
   assert.ok(DEFAULT_OWNERSHIP_VERBS.every((v) => v === v.toLowerCase()));
 });
+
+test('banned phrases: replacement values cannot cascade into other configured phrases', () => {
+  const cfg: GuardConfig = {
+    format_version: 1,
+    mode: 'enforce',
+    banned_phrases: { 'cutting-edge': 'innovative', innovative: 'forward-thinking' }
+  };
+  const r = applyGuards('A cutting-edge tool.', cfg);
+  assert.equal(r.text, 'A innovative tool.');
+  assert.deepEqual(
+    r.fires.filter((f) => f.guard === 'banned_phrases').map((f) => f.rule),
+    ['cutting-edge']
+  );
+});
+
+test('ownership: multi-sentence zero-fire text returns byte-identical', () => {
+  const text = 'Northwind ships fast.  Two spaces there. Acme Backup could help.\nNew line kept.';
+  const r = applyGuards(text, enforce, { ownershipConfirmed: false });
+  assert.equal(r.text, text);
+});
+
+test('ownership: empty-string entries in custom ownership_verbs are ignored', () => {
+  const cfg: GuardConfig = {
+    ...enforce,
+    ownership: { vendor_terms: ['Acme Backup'], ownership_verbs: ['', 'already uses'] }
+  };
+  const r = applyGuards('Acme Backup could help your team.', cfg, { ownershipConfirmed: false });
+  assert.equal(r.text, 'Acme Backup could help your team.');
+});
