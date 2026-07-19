@@ -46,6 +46,23 @@ export const DEFAULT_GUARD_CONFIG: GuardConfig = { format_version: 1, mode: 'off
 
 const MODES: readonly string[] = ['off', 'shadow', 'enforce'];
 
+export function filterSignalRecency<T extends { date?: string }>(
+  signals: T[],
+  months: number,
+  now: Date = new Date()
+): T[] {
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - months);
+  return signals
+    .filter((s) => {
+      if (!s.date) return false;
+      const d = new Date(s.date);
+      if (Number.isNaN(d.getTime())) return false;
+      return d >= cutoff && d <= now;
+    })
+    .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+}
+
 export function validateGuardConfig(input: unknown): string[] {
   const errors: string[] = [];
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -154,6 +171,10 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// --- leak guards: recipient name, placeholder tokens, test identities ---
+
+const PLACEHOLDER = /\[[A-Z][A-Z0-9 _-]*\](?!\()/;
+
 // --- entry point ---
 
 export function applyGuards(text: string, config: GuardConfig, context: GuardContext = {}): GuardResult {
@@ -223,6 +244,40 @@ function runOwnership(
   }
   return dropped ? kept.join(' ') : text;
 }
-function runLeakGuards(text: string, _c: GuardConfig, _x: GuardContext, _f: GuardFire[], _s: string): string {
-  return text;
+function runLeakGuards(
+  text: string,
+  config: GuardConfig,
+  context: GuardContext,
+  fires: GuardFire[],
+  source: string
+): string {
+  let out = text;
+  if (config.forbid_recipient_name && context.recipientName) {
+    const name = context.recipientName.trim();
+    if (name) {
+      const re = new RegExp(`\\s*\\b${escapeRegExp(name)}\\b`, 'g');
+      if (re.test(out)) {
+        const action = config.mode === 'enforce' ? 'rewrite' : 'note';
+        fires.push({ guard: 'name_leak', rule: 'recipient name', action, source });
+        if (config.mode === 'enforce') {
+          out = out.replace(re, '').replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
+        }
+      }
+    }
+  }
+  if (PLACEHOLDER.test(out)) {
+    const action = config.mode === 'enforce' ? 'drop_sentence' : 'note';
+    fires.push({ guard: 'placeholder_leak', rule: 'unfilled bracket token', action, source });
+    if (config.mode === 'enforce') {
+      out = splitSentences(out)
+        .filter((s) => !PLACEHOLDER.test(s))
+        .join(' ');
+    }
+  }
+  for (const identity of config.test_identity_denylist ?? []) {
+    if (identity && out.toLowerCase().includes(identity.toLowerCase())) {
+      fires.push({ guard: 'test_identity', rule: identity, action: 'note', source });
+    }
+  }
+  return out;
 }

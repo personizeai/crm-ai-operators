@@ -175,3 +175,76 @@ test('ownership: empty-string entries in custom ownership_verbs are ignored', ()
   const r = applyGuards('Acme Backup could help your team.', cfg, { ownershipConfirmed: false });
   assert.equal(r.text, 'Acme Backup could help your team.');
 });
+
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { filterSignalRecency } from '../core/lib/guards.js';
+
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'guard-incidents.json');
+
+test('name leak: enforce strips the recipient name with punctuation repair', () => {
+  const cfg: GuardConfig = { format_version: 1, mode: 'enforce', forbid_recipient_name: true };
+  const r = applyGuards('Hi Jordan, quick thought on Northwind.', cfg, { recipientName: 'Jordan' });
+  assert.equal(r.text, 'Hi, quick thought on Northwind.');
+  assert.equal(r.fires.find((f) => f.guard === 'name_leak')?.action, 'rewrite');
+});
+
+test('name leak: no context name means no guard', () => {
+  const cfg: GuardConfig = { format_version: 1, mode: 'enforce', forbid_recipient_name: true };
+  const r = applyGuards('Hi Jordan, quick thought.', cfg, {});
+  assert.equal(r.text, 'Hi Jordan, quick thought.');
+});
+
+test('placeholder leak: enforce drops the sentence containing the token', () => {
+  const cfg: GuardConfig = { format_version: 1, mode: 'enforce' };
+  const r = applyGuards('Solid quarter. Our [CAPABILITY_1] fits. Talk soon.', cfg);
+  assert.equal(r.text, 'Solid quarter. Talk soon.');
+  assert.equal(r.fires.find((f) => f.guard === 'placeholder_leak')?.action, 'drop_sentence');
+});
+
+test('test identity: noted in both shadow and enforce, never rewritten', () => {
+  const cfg: GuardConfig = {
+    format_version: 1,
+    mode: 'enforce',
+    test_identity_denylist: ['Sarah Chen']
+  };
+  const r = applyGuards('Ping Sarah Chen for access.', cfg);
+  assert.equal(r.text, 'Ping Sarah Chen for access.');
+  assert.equal(r.fires.find((f) => f.guard === 'test_identity')?.action, 'note');
+});
+
+test('filterSignalRecency drops undated, future-dated, and stale; sorts newest first', () => {
+  const now = new Date('2026-07-19T00:00:00Z');
+  const signals = [
+    { text: 'stale', date: '2024-01-10' },
+    { text: 'fresh', date: '2026-06-01' },
+    { text: 'future', date: '2027-01-01' },
+    { text: 'undated' },
+    { text: 'edge', date: '2025-09-15' }
+  ];
+  const kept = filterSignalRecency(signals, 12, now);
+  assert.deepEqual(kept.map((s) => s.text), ['fresh', 'edge']);
+});
+
+test('incident fixtures replay through applyGuards', () => {
+  const fx = JSON.parse(readFileSync(FIXTURES, 'utf8')) as {
+    config: GuardConfig;
+    cases: {
+      name: string;
+      input: string;
+      context: Record<string, unknown>;
+      expect_text?: string;
+      expect_guards: string[];
+    }[];
+  };
+  for (const c of fx.cases) {
+    const r = applyGuards(c.input, fx.config, c.context as never);
+    if (c.expect_text !== undefined) {
+      assert.equal(r.text, c.expect_text, `${c.name}: text`);
+    }
+    for (const g of c.expect_guards) {
+      assert.ok(r.fires.some((f) => f.guard === g), `${c.name}: expected fire ${g}`);
+    }
+  }
+});
