@@ -110,6 +110,50 @@ function containsTerm(sentence: string, terms: string[]): string | null {
   return null;
 }
 
+export const DEFAULT_OWNERSHIP_VERBS: readonly string[] = [
+  'already use',
+  'already uses',
+  'already using',
+  'currently use',
+  'currently uses',
+  'currently run',
+  'currently running',
+  'your deployment',
+  'you have deployed',
+  'you rely on',
+  'your existing'
+];
+
+export function hasPositiveVendorSignal(text: string, ownership: OwnershipConfig): boolean {
+  const pattern = ownership.confirm_pattern?.trim();
+  if (!pattern) return false;
+  let re: RegExp;
+  try {
+    re = new RegExp(pattern, 'i');
+  } catch {
+    return false;
+  }
+  const cues = (ownership.negation_cues ?? []).map((c) => c.toLowerCase());
+  for (const sentence of splitSentences(text)) {
+    if (!re.test(sentence)) continue;
+    const lower = sentence.toLowerCase();
+    if (cues.some((cue) => cue && lower.includes(cue))) continue;
+    return true;
+  }
+  return false;
+}
+
+function preserveCapital(original: string, replacement: string): string {
+  if (original.length > 0 && replacement.length > 0 && original[0] === original[0]?.toUpperCase()) {
+    return replacement[0]!.toUpperCase() + replacement.slice(1);
+  }
+  return replacement;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // --- entry point ---
 
 export function applyGuards(text: string, config: GuardConfig, context: GuardContext = {}): GuardResult {
@@ -127,11 +171,53 @@ export function applyGuards(text: string, config: GuardConfig, context: GuardCon
 }
 
 // Task 3 and Task 4 replace these stubs with real implementations.
-function runBannedPhrases(text: string, _c: GuardConfig, _f: GuardFire[], _s: string): string {
-  return text;
+function runBannedPhrases(text: string, config: GuardConfig, fires: GuardFire[], source: string): string {
+  const map = config.banned_phrases;
+  if (!map) return text;
+  let out = text;
+  const phrases = Object.keys(map).filter((p) => p.trim() !== '');
+  phrases.sort((a, b) => b.length - a.length);
+  for (const phrase of phrases) {
+    const re = new RegExp(escapeRegExp(phrase), 'gi');
+    if (!re.test(out)) continue;
+    const action = config.mode === 'enforce' ? 'rewrite' : 'note';
+    fires.push({ guard: 'banned_phrases', rule: phrase, action, source });
+    if (config.mode === 'enforce') {
+      out = out.replace(new RegExp(escapeRegExp(phrase), 'gi'), (m) =>
+        preserveCapital(m, map[phrase] ?? '')
+      );
+    }
+  }
+  return out;
 }
-function runOwnership(text: string, _c: GuardConfig, _x: GuardContext, _f: GuardFire[], _s: string): string {
-  return text;
+function runOwnership(
+  text: string,
+  config: GuardConfig,
+  context: GuardContext,
+  fires: GuardFire[],
+  source: string
+): string {
+  const own = config.ownership;
+  if (!own || own.vendor_terms.length === 0) return text;
+  if (context.ownershipConfirmed === true) return text;
+  const verbs = (own.ownership_verbs?.length ? own.ownership_verbs : [...DEFAULT_OWNERSHIP_VERBS]).map(
+    (v) => v.toLowerCase()
+  );
+  const sentences = splitSentences(text);
+  const kept: string[] = [];
+  for (const sentence of sentences) {
+    const term = containsTerm(sentence, own.vendor_terms);
+    const lower = sentence.toLowerCase();
+    const claims = term !== null && verbs.some((v) => lower.includes(v));
+    if (!claims) {
+      kept.push(sentence);
+      continue;
+    }
+    const action = config.mode === 'enforce' ? 'drop_sentence' : 'note';
+    fires.push({ guard: 'ownership', rule: `${term} + ownership verb`, action, source });
+    if (config.mode !== 'enforce') kept.push(sentence);
+  }
+  return kept.join(' ');
 }
 function runLeakGuards(text: string, _c: GuardConfig, _x: GuardContext, _f: GuardFire[], _s: string): string {
   return text;
