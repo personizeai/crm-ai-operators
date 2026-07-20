@@ -43,6 +43,11 @@
     { "propertyName": "Playbook Landmines", "systemName": "playbook_landmines", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Sales playbook section: landmines" },
     { "propertyName": "Playbook Next Step", "systemName": "playbook_next_step", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Sales playbook section: next step" },
 
+    { "propertyName": "Zone Status", "systemName": "zone_status", "type": "text", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Latest landing-zone generation status" },
+    { "propertyName": "Zone Hero Headline", "systemName": "zone_hero_headline", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Landing zone: hero headline. Example zone property; additional zones are provisioned the same way per campaign, or generated from a campaign's schema via buildPropertyManifestFragment in src/core/lib/zones/properties.ts." },
+    { "propertyName": "Zone Proof Paragraph", "systemName": "zone_proof_paragraph", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Landing zone: proof paragraph. Example zone property, see zone_hero_headline." },
+    { "propertyName": "Zone CTA Line", "systemName": "zone_cta_line", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Landing zone: call-to-action line. Example zone property, see zone_hero_headline." },
+
     { "propertyName": "Emails Sent", "systemName": "emails_sent", "type": "number", "autoSystem": false, "writeback": false, "description": "Count of outreach emails sent in the current sequence. Used for cadence gating — no parsing needed." },
     { "propertyName": "Last Sent At", "systemName": "last_sent_at", "type": "date", "autoSystem": false, "writeback": false, "description": "ISO timestamp of the most recent outreach email. Used for timing-gap checks between sequence steps." },
     { "propertyName": "Sequence Status", "systemName": "sequence_status", "type": "options", "autoSystem": false, "writeback": false, "options": ["Active", "Replied", "Bounced", "Opted Out", "Complete", "Paused"], "description": "Current outreach sequence state. Updated on engagement events." },

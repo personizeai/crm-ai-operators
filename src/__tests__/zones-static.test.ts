@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseStaticZones } from '../core/lib/zones/static.js';
 import type { ZoneSchema } from '../core/lib/zones/schema.js';
+import { OPERATIONS } from '../core/operations/registry.js';
 
 const SCHEMA: ZoneSchema = {
   format_version: 1,
@@ -41,4 +42,9 @@ test('static copy still passes through length clamping and fallback rules', () =
   const r = parseStaticZones('## hero_headline\nThis is a very long headline well beyond twenty characters with no early period', longSchema);
   assert.equal(r['hero_headline']?.text, 'Short fallback.');
   assert.equal(r['hero_headline']?.used_fallback, true);
+});
+
+test('generate.landing-zones is registered and live', () => {
+  const op = OPERATIONS['generate.landing-zones'];
+  assert.ok(op && op.status === 'live' && op.category === 'generate');
 });
