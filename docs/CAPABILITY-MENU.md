@@ -59,6 +59,8 @@
 | `generate.proposal` | live | high | manual | ✗ | Markdown proposal draft from Personize memory (deal data synced from CRM). Always for human review — creates a review task. |
 | `generate.win-back-sequence` | live | high | on-decision | ✗ | 3-email win-back for churned contacts. Anchored in past engagement + what's new since they left. |
 | `generate.mutual-action-plan` | live | high | on-decision | ✗ | Draft a Mutual Action Plan from deal data and Personize memory. Creates one milestone task per MAP step. Stored in projects for human review. |
+| `generate.sales-playbook` | live | medium | on-decision | ✗ | Five-section rep-facing pre-call playbook (account snapshot, why now, talk track, landmines, next step) grounded in sales-playbook-rules + brand-voice. Writes playbook_* properties to Personize memory first, then mirrors to CRM. |
+| `generate.landing-zones` | live | medium | on-decision | ✗ | Personalized or standard-mode landing-page zone copy from a campaign's zone schema, grounded in landing-page-rules + brand-voice. Writes zone_* properties to Personize memory first, then mirrors to CRM. |
 
 ## analyze
 
@@ -96,10 +98,10 @@
 
 | Status | Count |
 |--------|-------|
-| live | 29 |
+| live | 31 |
 | scaffold | 0 |
 | idea | 0 |
-| **Total** | **29** |
+| **Total** | **31** |
 
 ---
 

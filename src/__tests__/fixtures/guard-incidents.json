@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "note": "Regression cases derived from real production incident classes, rewritten with fictional names. Each case: input, context, config overrides, expected enforced text and expected fire guards. Future-dated signal rejection is pinned by unit tests of the recency helper, which applyGuards does not call.",
+  "config": {
+    "format_version": 1,
+    "mode": "enforce",
+    "banned_phrases": { "revolutionize": "improve" },
+    "ownership": {
+      "vendor_terms": ["Acme Backup"],
+      "ownership_verbs": ["already uses", "secures its workloads with"],
+      "negation_cues": ["evaluating", "considering", "not yet", "no "],
+      "confirm_pattern": "(uses|deployed|standardized on) Acme Backup"
+    },
+    "forbid_recipient_name": true,
+    "test_identity_denylist": ["Sarah Chen", "Test AE"]
+  },
+  "cases": [
+    {
+      "name": "unconfirmed-ownership-claim-dropped",
+      "input": "Northwind Manufacturing secures its workloads with Acme Backup. Contoso Cloud can help you extend that.",
+      "context": { "ownershipConfirmed": false },
+      "expect_text": "Contoso Cloud can help you extend that.",
+      "expect_guards": ["ownership"]
+    },
+    {
+      "name": "unconfirmed-claim-whole-text-drop",
+      "input": "Your team already uses Acme Backup across sites.",
+      "context": { "ownershipConfirmed": false },
+      "expect_text": "",
+      "expect_guards": ["ownership"]
+    },
+    {
+      "name": "recipient-name-stripped",
+      "input": "Hi Jordan, Northwind's expansion caught our eye.",
+      "context": { "recipientName": "Jordan" },
+      "expect_text": "Hi, Northwind's expansion caught our eye.",
+      "expect_guards": ["name_leak"]
+    },
+    {
+      "name": "placeholder-sentence-dropped",
+      "input": "Congrats on the Ohio plant. Our [CAPABILITY_1] helps teams like yours.",
+      "context": {},
+      "expect_text": "Congrats on the Ohio plant.",
+      "expect_guards": ["placeholder_leak"]
+    },
+    {
+      "name": "test-identity-noted-not-rewritten",
+      "input": "Reach out to Sarah Chen for a walkthrough.",
+      "context": {},
+      "expect_text": "Reach out to Sarah Chen for a walkthrough.",
+      "expect_guards": ["test_identity"]
+    },
+    {
+      "name": "banned-phrase-replaced",
+      "input": "We will revolutionize your archive costs.",
+      "context": {},
+      "expect_text": "We will improve your archive costs.",
+      "expect_guards": ["banned_phrases"]
+    }
+  ]
+}

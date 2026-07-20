@@ -15,6 +15,8 @@ import { generateOutreachSequence } from "./impl/generate-outreach-sequence.js";
 import { generateMeetingBrief } from "./impl/generate-meeting-brief.js";
 import { generateProposal } from "./impl/generate-proposal.js";
 import { generateWinBackSequence } from "./impl/generate-win-back-sequence.js";
+import { generateSalesPlaybook } from "./impl/generate-sales-playbook.js";
+import { generateLandingZones } from "./impl/generate-landing-zones.js";
 import { analyzeReplySentiment } from "./impl/analyze-reply-sentiment.js";
 import { analyzeBuyingStage } from "./impl/analyze-buying-stage.js";
 import { actNotifyRepHandoff } from "./impl/act-notify-rep-handoff.js";
@@ -54,6 +56,8 @@ const ALL: OperationEntry[] = [
   generateProposal,
   generateWinBackSequence,
   generateMutualActionPlan,
+  generateSalesPlaybook,
+  generateLandingZones,
   // analyze
   analyzeReplySentiment,
   analyzeBuyingStage,

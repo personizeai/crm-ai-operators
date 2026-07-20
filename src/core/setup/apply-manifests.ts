@@ -34,7 +34,7 @@ interface ApplyOptions {
 const CollectionPropertySchema = z.object({
   propertyName: z.string(),
   systemName: z.string().regex(/^[a-z][a-z0-9_]*$/, "systemName must be snake_case"),
-  type: z.enum(["text", "number", "boolean", "date", "options", "array"]),
+  type: z.enum(["text", "longtext", "number", "boolean", "date", "options", "array"]),
   autoSystem: z.boolean(),
   options: z.array(z.string()).optional(),
   description: z.string().optional(),
@@ -148,6 +148,32 @@ async function readJsonFiles(files: ManifestFile[]): Promise<Array<{ name: strin
   return out;
 }
 
+/**
+ * The shape `toSdkProperties` returns: every manifest property field
+ * untouched (including manifest-only ones the SDK type doesn't declare, e.g.
+ * `writeback`/`source`), with `type` narrowed to drop `longtext`. Structurally
+ * compatible with `CollectionPropertyDefinition[]` for the collections.create
+ * / collections.update calls, extra fields are simply ignored by the SDK.
+ */
+type SdkSafeProperty = Omit<CollectionManifest["properties"][number], "type"> & {
+  type: Exclude<CollectionManifest["properties"][number]["type"], "longtext">;
+};
+
+/**
+ * `longtext` is a CRM-writeback-only distinction (Salesforce/HubSpot custom
+ * field sizing, see apply-crm-properties.ts's hubspotFieldType and
+ * salesforceFieldMetadata). Personize's own collection storage has no such
+ * length cap and the SDK's CollectionPropertyDefinition has no `longtext`
+ * variant, so it collapses to `text` for the create/update payload. The
+ * manifest file on disk keeps `longtext`; applyCrmProperties reads that copy
+ * independently when provisioning the CRM-side field. Every other field
+ * (including manifest-only ones like `writeback`/`source`) passes through
+ * unchanged.
+ */
+export function toSdkProperties(properties: CollectionManifest["properties"]): SdkSafeProperty[] {
+  return properties.map((p) => ({ ...p, type: p.type === "longtext" ? "text" : p.type }));
+}
+
 async function applyCollections(files: ManifestFile[], dryRun: boolean): Promise<number> {
   const desired = await readJsonFiles(files);
   if (desired.length === 0) return 0;
@@ -196,7 +222,7 @@ async function applyCollections(files: ManifestFile[], dryRun: boolean): Promise
       const existingProps = (existingCollection.properties ?? []) as typeof netNewProps;
       await client.collections.update(existingCollection.id, {
         ...manifest.data,
-        properties: [...existingProps, ...netNewProps],
+        properties: toSdkProperties([...existingProps, ...netNewProps]),
       });
       logger.info("Updated collection", { slug, netNew: netNewProps.length });
       continue;
@@ -208,7 +234,7 @@ async function applyCollections(files: ManifestFile[], dryRun: boolean): Promise
       continue;
     }
 
-    await client.collections.create(manifest.data);
+    await client.collections.create({ ...manifest.data, properties: toSdkProperties(manifest.data.properties) });
     logger.info("Created collection", { slug });
   }
 
