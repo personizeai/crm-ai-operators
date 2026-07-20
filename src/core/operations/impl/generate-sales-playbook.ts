@@ -3,6 +3,7 @@ import { retrieveRecord } from "../../lib/recall.js";
 import { ai } from "../../lib/ai.js";
 import { loadGuidelines, missingGuidelines } from "../../lib/governance.js";
 import { logger } from "../../lib/logger.js";
+import { evaluateSkipIf } from "../../lib/skip-if.js";
 import { workspace } from "../../lib/workspace.js";
 import { setProperties } from "../../lib/persist.js";
 import { crmWriteback } from "../../lib/crm-writeback.js";
@@ -43,6 +44,8 @@ interface ContactRecord {
   pain_points?: string[];
   interests?: string[];
   context?: string;
+  /** Outreach sequence state; "Opted Out" gates this operation, see run(). */
+  sequence_status?: string;
   /** CRM object id, drives the CRM writeback path (mirrorPlaybookToCrm). */
   crm_record_id?: string;
   [key: string]: unknown;
@@ -112,6 +115,12 @@ export const generateSalesPlaybook: OperationEntry = {
   cost: "medium",
   run_mode: "on-decision",
   guidelines_required: REQUIRED_GUIDELINES,
+  // Matches generate-outreach-sequence.ts's opt-out convention: sequence_status
+  // is the one real do-not-contact signal on the contacts collection (see
+  // manifests/core/collections/contacts.json). Declared here so dispatch/skip
+  // tooling can see it, and read back via evaluateSkipIf in run() below so the
+  // declared rule and the enforced rule can never drift apart.
+  skip_if: { property: "sequence_status", in_states: ["Opted Out"] },
   run: async (input, context) => {
     const email = (input as { email?: string } | undefined)?.email;
     if (!email) {
@@ -132,6 +141,21 @@ export const generateSalesPlaybook: OperationEntry = {
         operation: "generate.sales-playbook",
         dryRun: context.dryRun,
         summary: `Contact not found in Personize: ${email}. Run crm.sync-core first.`,
+      };
+    }
+
+    // Opt-out gate, before any guideline load, generation, or write. A skip is
+    // not a failure (ok: true), consistent with generate-outreach-sequence.ts.
+    const skipDecision = evaluateSkipIf(generateSalesPlaybook.skip_if!, contact as Record<string, unknown>);
+    if (skipDecision.skip) {
+      return {
+        ok: true,
+        runId: context.runId,
+        operation: "generate.sales-playbook",
+        dryRun: context.dryRun,
+        status: "live",
+        summary: `skipped: contact opted out (${email})`,
+        metrics: { skipped: "opted_out" },
       };
     }
 

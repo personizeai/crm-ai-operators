@@ -48,3 +48,10 @@ test('generate.landing-zones is registered and live', () => {
   const op = OPERATIONS['generate.landing-zones'];
   assert.ok(op && op.status === 'live' && op.category === 'generate');
 });
+
+test('generate.landing-zones declares an opt-out skip_if', () => {
+  const op = OPERATIONS['generate.landing-zones'];
+  assert.ok(op.skip_if);
+  assert.equal(op.skip_if.property, 'sequence_status');
+  assert.ok(op.skip_if.in_states?.includes('Opted Out'));
+});

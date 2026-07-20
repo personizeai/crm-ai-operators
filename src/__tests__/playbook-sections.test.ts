@@ -45,3 +45,10 @@ test('generate.sales-playbook is registered and live', () => {
   assert.equal(op.status, 'live');
   assert.equal(op.category, 'generate');
 });
+
+test('generate.sales-playbook declares an opt-out skip_if', () => {
+  const op = OPERATIONS['generate.sales-playbook'];
+  assert.ok(op.skip_if);
+  assert.equal(op.skip_if.property, 'sequence_status');
+  assert.ok(op.skip_if.in_states?.includes('Opted Out'));
+});
