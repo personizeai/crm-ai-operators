@@ -32,7 +32,7 @@ const SF_LABEL_MAX = 40;
 interface ManifestProperty {
   propertyName: string;
   systemName: string;
-  type: "text" | "number" | "boolean" | "date" | "options" | "array";
+  type: "text" | "longtext" | "number" | "boolean" | "date" | "options" | "array";
   options?: string[];
   description?: string;
   source?: "inferred" | "extracted" | "crm";
@@ -62,10 +62,10 @@ const SF_COLLECTION_TO_OBJECTS: Record<string, string[]> = {
 
 interface HubspotFieldType {
   type: "string" | "number" | "bool" | "date" | "enumeration";
-  fieldType: "text" | "number" | "booleancheckbox" | "date" | "select" | "checkbox";
+  fieldType: "text" | "textarea" | "number" | "booleancheckbox" | "date" | "select" | "checkbox";
 }
 
-function hubspotFieldType(p: ManifestProperty): HubspotFieldType {
+export function hubspotFieldType(p: ManifestProperty): HubspotFieldType {
   switch (p.type) {
     case "number":
       return { type: "number", fieldType: "number" };
@@ -77,6 +77,8 @@ function hubspotFieldType(p: ManifestProperty): HubspotFieldType {
       return { type: "enumeration", fieldType: "select" };
     case "array":
       return { type: "enumeration", fieldType: "checkbox" };
+    case "longtext":
+      return { type: "string", fieldType: "textarea" };
     case "text":
     default:
       return { type: "string", fieldType: "text" };
@@ -212,6 +214,8 @@ export function salesforceFieldMetadata(p: ManifestProperty): Record<string, unk
       return { ...base, type: "Picklist", valueSet: salesforceValueSet(p.options) };
     case "array":
       return { ...base, type: "MultiselectPicklist", visibleLines: 4, valueSet: salesforceValueSet(p.options) };
+    case "longtext":
+      return { ...base, type: "LongTextArea", length: 32768, visibleLines: 5 };
     case "text":
     default:
       return { ...base, type: "Text", length: 255 };
