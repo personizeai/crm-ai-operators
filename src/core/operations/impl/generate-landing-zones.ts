@@ -56,7 +56,7 @@ async function mirrorZonesToCrm(
   try {
     return await crmWriteback(
       { crm, type: "contact", crmRecordId },
-      { zone_status: "generated", ...properties },
+      { ...properties, zone_status: "generated" },
     );
   } catch (error) {
     logger.warn("Failed to mirror landing zones to CRM", {
@@ -79,7 +79,7 @@ async function writeZonesToMemory(
   try {
     return await setProperties(
       { email, type: "contact" },
-      { zone_status: "generated", ...properties },
+      { ...properties, zone_status: "generated" },
     );
   } catch (error) {
     logger.warn("Failed to write landing zones to Personize memory", {
@@ -221,7 +221,7 @@ export const generateLandingZones: OperationEntry = {
     const guardCfg = { ...DEFAULT_GUARD_CONFIG, mode: "enforce" as const };
     let fires = 0;
     for (const [name, result] of Object.entries(zoneResults)) {
-      const g = applyGuards(result.text, guardCfg, { ownershipConfirmed: false });
+      const g = applyGuards(result.text, guardCfg, { ownershipConfirmed: lead.confirmed_customer === true });
       zoneResults[name] = { ...result, text: g.text };
       fires += g.fires.length;
     }

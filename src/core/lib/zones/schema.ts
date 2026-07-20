@@ -48,6 +48,12 @@ export function validateZoneSchema(input: unknown): string[] {
       errors.push(`zones[${i}].name: lowercase snake_case, starts with a letter, max ${NAME_MAX} chars`);
     } else if (seen.has(name)) {
       errors.push(`zones[${i}].name: duplicate "${name}"`);
+    } else if (name === 'status') {
+      // Reserved: mapZonesToProperties's zone_ prefix would turn this into
+      // zone_status, colliding with the operation's own generation-status
+      // marker property (see generate-landing-zones.ts's writeZonesToMemory
+      // and mirrorZonesToCrm).
+      errors.push(`zones[${i}].name: "status" is reserved (collides with zone_status)`);
     } else {
       seen.add(name);
     }

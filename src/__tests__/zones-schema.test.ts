@@ -37,3 +37,8 @@ test('fallback must be nonempty and fit max_chars; max_chars sane', () => {
   const badMax = { ...GOOD, zones: [{ ...GOOD.zones[0]!, max_chars: 0 }] };
   assert.ok(validateZoneSchema(badMax).some((e) => e.includes('max_chars')));
 });
+
+test('a zone named status is rejected (reserved)', () => {
+  const bad = { format_version: 1, output: 'plain_text', zones: [{ name: 'status', max_chars: 90, fallback: 'F.', guidance: 'g' }] };
+  assert.ok(validateZoneSchema(bad).some((e) => e.includes('reserved')));
+});
