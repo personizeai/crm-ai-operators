@@ -67,11 +67,11 @@ async function mirrorZonesToCrm(
 }
 
 // Personize memory is the source of truth, per crm-writeback.ts's own header
-// comment. Unlike generate-sales-playbook.ts's writePlaybookToMemory (whose
-// CRM mirror still runs even when this write fails), a failure here
-// short-circuits run() before mirrorZonesToCrm is ever called, per the Task 5
-// plan: the CRM must never receive zone content that Personize memory itself
-// failed to keep.
+// comment. A failure here short-circuits run() before workspace.appendUpdate or
+// mirrorZonesToCrm is ever called, per the Task 5 plan: the CRM must never
+// receive zone content that Personize memory itself failed to keep.
+// generate-sales-playbook.ts's writePlaybookToMemory now follows the same
+// short-circuit shape.
 async function writeZonesToMemory(
   email: string,
   properties: Record<string, string>,
@@ -201,9 +201,15 @@ export const generateLandingZones: OperationEntry = {
     // dashboard-editable copy from a guideline with no AI call (static.ts);
     // anything else, including unset, generates with AI (generate.ts).
     let zoneResults: Record<string, ZoneResult>;
+    // Unified fallback count across both zone-core paths, reported in
+    // metrics.fallbacks below. Starts from generation/parse-time fallback
+    // usage and is topped up by the post-guard empty-zone contract further
+    // down, so the final number always matches the shipped zoneResults.
+    let fallbacks: number;
     if (schema.generation_mode === "standard") {
       const copyBody = await loadGuideline("landing-zone-copy");
       zoneResults = parseStaticZones(copyBody, schema);
+      fallbacks = Object.values(zoneResults).filter((r) => r.used_fallback === true).length;
     } else {
       const out = await generateZones(schema, guidelines, lead, {
         // buildZonePrompt (called inside generateZones) already composes a
@@ -216,6 +222,7 @@ export const generateLandingZones: OperationEntry = {
         },
       });
       zoneResults = out.results;
+      fallbacks = out.fallbacks;
     }
 
     const guardCfg = { ...DEFAULT_GUARD_CONFIG, mode: "enforce" as const };
@@ -225,12 +232,31 @@ export const generateLandingZones: OperationEntry = {
       zoneResults[name] = { ...result, text: g.text };
       fires += g.fires.length;
     }
+
+    // Post-guard empty-zone contract: a guard (e.g. a placeholder drop_sentence)
+    // can blank a zone's text after generation/parsing already succeeded, and
+    // that text must never ship empty unless the zone opts into hide_if_empty
+    // (the template auto-hides those, see zones/generate.ts's
+    // applyFallbackStrategy). For every zone whose text is now '', restore its
+    // schema fallback and mark it used, unless it already counted toward
+    // `fallbacks` above (a hide_if_empty zone, or a fallback_copy zone whose
+    // own fallback text got guard-blanked) to avoid double counting.
+    const zoneSpecByName = new Map(schema.zones.map((z) => [z.name, z]));
+    for (const [name, result] of Object.entries(zoneResults)) {
+      if (result.text !== "") continue;
+      const spec = zoneSpecByName.get(name);
+      if (spec && spec.fallback_strategy !== "hide_if_empty") {
+        if (!result.used_fallback) fallbacks++;
+        zoneResults[name] = { ...result, text: spec.fallback, used_fallback: true };
+      }
+    }
+
     const properties = mapZonesToProperties(zoneResults, { prefix: "zone_" });
 
     // Memory first (source of truth), then CRM mirror. A memory-write failure
     // short-circuits here, before workspace.appendUpdate or mirrorZonesToCrm
-    // run; see writeZonesToMemory's own comment for why this differs from
-    // generate-sales-playbook.ts.
+    // run; see writeZonesToMemory's own comment for why. Matches
+    // generate-sales-playbook.ts's writePlaybookToMemory short-circuit ordering.
     const memoryWritten = await writeZonesToMemory(email, properties);
     if (!memoryWritten) {
       return {
@@ -262,7 +288,7 @@ export const generateLandingZones: OperationEntry = {
       dryRun: context.dryRun,
       status: "live",
       summary: `Landing zones generated for ${email}${wrote ? ", written to CRM" : ""}.`,
-      metrics: { zones: Object.keys(properties).length, guard_fires: fires, crm_written: wrote },
+      metrics: { zones: Object.keys(properties).length, guard_fires: fires, fallbacks, crm_written: wrote },
     };
   },
 };

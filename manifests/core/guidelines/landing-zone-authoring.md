@@ -105,3 +105,5 @@ For example, if your schema defines zones `hero` and `social_proof`, the zone pr
 - `zone_social_proof`
 
 These are the Personize property names, and Personize memory is the source of truth for them. The CRM writeback then mirrors the same values to the connected CRM's namespaced custom fields automatically, no separate mapping step needed: HubSpot receives `personize_zone_<zone_name>` (e.g. `personize_zone_hero`), Salesforce receives `Personize_Zone_<Zone_Name>__c` (e.g. `Personize_Zone_Hero__c`). Author and reference the bare `zone_*` names above; the CRM-specific prefix is applied by the writeback layer, not by this operation. The customer's landing page template queries the CRM-side fields and renders them in the appropriate DOM locations.
+
+Keep zone names short: the `Personize_Zone_` prefix plus the `__c` suffix already uses 18 of Salesforce's 40-character custom-field API-name limit, so a zone name must stay well under ~25 characters or the Salesforce field creation will fail.

@@ -42,3 +42,13 @@ test('a zone named status is rejected (reserved)', () => {
   const bad = { format_version: 1, output: 'plain_text', zones: [{ name: 'status', max_chars: 90, fallback: 'F.', guidance: 'g' }] };
   assert.ok(validateZoneSchema(bad).some((e) => e.includes('reserved')));
 });
+
+test('rejects a bad per-zone fallback_strategy literal and a bad top-level generation_mode literal', () => {
+  const badStrategy = { ...GOOD, zones: [{ ...GOOD.zones[0]!, fallback_strategy: 'always_show' }] };
+  const strategyErrors = validateZoneSchema(badStrategy);
+  assert.ok(strategyErrors.some((e) => e.includes('fallback_strategy')), strategyErrors.join('; '));
+
+  const badMode = { ...GOOD, generation_mode: 'ai_only' };
+  const modeErrors = validateZoneSchema(badMode);
+  assert.ok(modeErrors.some((e) => e.includes('generation_mode')), modeErrors.join('; '));
+});

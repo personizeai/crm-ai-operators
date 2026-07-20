@@ -52,7 +52,7 @@ You've built a capable AI agent with no institutional memory.
 
 ## What is this repo
 
-A catalog of **29 operations** — patterns, prompts, workflows, and scripts — that teach AI agents how to work inside a CRM.
+A catalog of **31 operations** — patterns, prompts, workflows, and scripts — that teach AI agents how to work inside a CRM.
 
 Organized into three capability tiers:
 
@@ -102,7 +102,7 @@ cp .env.example .env                        # set PERSONIZE_SECRET_KEY; keep DRY
 npm run setup:verify                        # preflight: auth + what's missing
 npm run setup:diff -- --crm hubspot         # dry-run: shows the personize_* fields it would create
 npm run setup     -- --crm hubspot          # apply: Personize collections, guidelines, CRM fields
-npm run operation:list                      # see all 29 operations
+npm run operation:list                      # see all 31 operations
 npm run operate   -- score.icp-fit --crm hubspot   # run one (dry-run by default)
 npm run engine                              # optional: start the dispatcher loop
 ```
@@ -430,7 +430,7 @@ Same endpoint, same governance — `subagent` just turns on the agent toolset. R
 
 ## The operations catalog
 
-**29 operations** across these namespaces. Discover them live with `operation_list` (MCP) or `crm-agent operation list` (CLI); full reference in [docs/CAPABILITY-MENU.md](docs/CAPABILITY-MENU.md).
+**31 operations** across these namespaces. Discover them live with `operation_list` (MCP) or `crm-agent operation list` (CLI); full reference in [docs/CAPABILITY-MENU.md](docs/CAPABILITY-MENU.md).
 
 | Namespace | What it does | Operations |
 |---|---|---|

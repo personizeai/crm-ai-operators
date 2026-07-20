@@ -19,15 +19,16 @@ import type { CrmId, OperationEntry } from "../types.js";
 
 const REQUIRED_GUIDELINES = ["sales-playbook-rules", "brand-voice"];
 
-// One string field per doctrine section (each length-capped to its section's
-// max_chars, so an overlong model response fails schema validation and gets
-// one self-repair retry, see ai.ts finalizeJsonOutput), plus a `verification`
-// field the model sets to "rejected" when it cannot write every section
-// without an unconfirmed ownership claim or an invented fact (verify-then-emit,
-// see instruction-patterns.ts and generate-outreach-sequence.ts).
+// One string field per doctrine section (each non-empty and length-capped to
+// its section's max_chars, so an all-empty or overlong model response fails
+// schema validation and gets one self-repair retry, see ai.ts
+// finalizeJsonOutput), plus a `verification` field the model sets to
+// "rejected" when it cannot write every section without an unconfirmed
+// ownership claim or an invented fact (verify-then-emit, see
+// instruction-patterns.ts and generate-outreach-sequence.ts).
 const PlaybookSchema = z.object(
   PLAYBOOK_SECTIONS.reduce<Record<string, z.ZodTypeAny>>((shape, s) => {
-    shape[s.name] = z.string().max(s.max_chars);
+    shape[s.name] = z.string().min(1).max(s.max_chars);
     return shape;
   }, { verification: VerificationSchema }),
 );
@@ -55,6 +56,8 @@ async function getContact(email: string): Promise<ContactRecord | null> {
 // swallowed so a CRM hiccup can't fail an otherwise-successful playbook generation.
 // playbook_full carries the composed body (longtext); playbook_status is the only
 // short (text) field. Per-section bodies also land in their own longtext fields.
+// Called only after a successful memory write (see run()), so the CRM record can
+// never be ahead of Personize memory, the source of truth, for a playbook.
 async function mirrorPlaybookToCrm(
   full: string,
   properties: Record<string, string>,
@@ -77,9 +80,10 @@ async function mirrorPlaybookToCrm(
 // Personize memory is the source of truth, per crm-writeback.ts's own header
 // comment: this writes here first, unconditionally, before the CRM mirror runs.
 // Unlike mirrorPlaybookToCrm, this does not depend on crm_record_id, so it still
-// lands for a contact that has never synced to a CRM object. A failure here fails
-// the whole operation (memory is the source of truth); a CRM-mirror failure does
-// not, see mirrorPlaybookToCrm.
+// lands for a contact that has never synced to a CRM object. A failure here
+// short-circuits run() before workspace.appendUpdate or mirrorPlaybookToCrm is
+// ever called (memory is the source of truth); a CRM-mirror failure does not,
+// see mirrorPlaybookToCrm. Matches generate-landing-zones.ts's writeZonesToMemory.
 async function writePlaybookToMemory(
   email: string,
   full: string,
@@ -229,6 +233,21 @@ export const generateSalesPlaybook: OperationEntry = {
     }
     const { full, properties } = assemblePlaybook(guarded);
 
+    // Memory first (source of truth), then CRM mirror. A memory-write failure
+    // short-circuits here, before workspace.appendUpdate or mirrorPlaybookToCrm
+    // run; see writePlaybookToMemory's own comment for why. Matches
+    // generate-landing-zones.ts's writeZonesToMemory short-circuit ordering.
+    const memoryWritten = await writePlaybookToMemory(email, full, properties);
+    if (!memoryWritten) {
+      return {
+        ok: false,
+        runId: context.runId,
+        operation: "generate.sales-playbook",
+        dryRun: context.dryRun,
+        summary: `${email} playbook generated but memory write failed.`,
+      };
+    }
+
     await workspace.appendUpdate(
       { email },
       {
@@ -240,19 +259,16 @@ export const generateSalesPlaybook: OperationEntry = {
       "contact",
     );
 
-    const memoryWritten = await writePlaybookToMemory(email, full, properties);
     const wrote = await mirrorPlaybookToCrm(full, properties, contact.crm_record_id, context.crm);
 
     return {
-      ok: memoryWritten,
+      ok: true,
       runId: context.runId,
       operation: "generate.sales-playbook",
       dryRun: context.dryRun,
       status: "live",
-      summary: memoryWritten
-        ? `Sales playbook generated for ${email}${wrote ? ", written to CRM" : ""}.`
-        : `Sales playbook generated for ${email}, but failed to write to Personize memory.`,
-      metrics: { guard_fires: fires, memory_written: memoryWritten, crm_written: wrote },
+      summary: `Sales playbook generated for ${email}${wrote ? ", written to CRM" : ""}.`,
+      metrics: { guard_fires: fires, crm_written: wrote },
     };
   },
 };

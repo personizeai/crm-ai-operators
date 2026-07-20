@@ -44,7 +44,7 @@
     { "propertyName": "Playbook Next Step", "systemName": "playbook_next_step", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Sales playbook section: next step" },
 
     { "propertyName": "Zone Status", "systemName": "zone_status", "type": "text", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Latest landing-zone generation status" },
-    { "propertyName": "Zone Hero Headline", "systemName": "zone_hero_headline", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Landing zone: hero headline. Example zone property; additional zones are provisioned the same way per campaign, or generated from a campaign's schema via buildPropertyManifestFragment in src/core/lib/zones/properties.ts." },
+    { "propertyName": "Zone Hero Headline", "systemName": "zone_hero_headline", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Landing zone: hero headline. Example zone property; additional zones are provisioned the same way per campaign: add a zone_<name> longtext property to this manifest, matching this entry's shape." },
     { "propertyName": "Zone Proof Paragraph", "systemName": "zone_proof_paragraph", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Landing zone: proof paragraph. Example zone property, see zone_hero_headline." },
     { "propertyName": "Zone CTA Line", "systemName": "zone_cta_line", "type": "longtext", "autoSystem": true, "source": "inferred", "writeback": true, "description": "Landing zone: call-to-action line. Example zone property, see zone_hero_headline." },
 
