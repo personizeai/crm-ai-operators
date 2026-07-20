@@ -437,7 +437,7 @@ Same endpoint, same governance — `subagent` just turns on the agent toolset. R
 | `sync` / `crm` | Mirror + normalize CRM data | `crm.sync-core`, `crm.sync-out`, `crm.sync-schedule`, `sync.normalize-lifecycle`, `sync.pull-engagements`, `sync.push-properties`, `sync.call-transcripts-bulk` |
 | `research` | Enrich contacts/accounts from public sources | `research.account-deep-dive`, `research.contact-background` |
 | `score` | Rank against ICP / lead quality | `score.icp-fit`, `score.lead-quality` |
-| `generate` | Draft customer-facing assets | `generate.outreach-sequence`, `generate.proposal`, `generate.meeting-brief`, `generate.mutual-action-plan`, `generate.win-back-sequence` |
+| `generate` | Draft customer-facing assets | `generate.outreach-sequence`, `generate.proposal`, `generate.meeting-brief`, `generate.mutual-action-plan`, `generate.win-back-sequence`, `generate.sales-playbook`, `generate.landing-zones` |
 | `analyze` | Interpret CRM activity | `analyze.buying-stage`, `analyze.reply-sentiment`, `analyze.call-summary`, `analyze.deduplication` |
 | `act` | Notify + hand off to humans | `act.daily-digest`, `act.notify-rep-handoff` |
 | `report` | Pipeline + win/loss narratives | `report.pipeline-health`, `report.win-loss` |
