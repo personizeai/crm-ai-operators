@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PLAYBOOK_SECTIONS, assemblePlaybook, playbookSectionSchema } from '../core/lib/playbook/sections.js';
 import { validateZoneSchema } from '../core/lib/zones/schema.js';
+import { OPERATIONS } from '../core/operations/registry.js';
 
 test('exactly the five doctrine sections, in order', () => {
   assert.deepEqual(
@@ -36,4 +37,11 @@ test('assemblePlaybook composes the full doc and a per-section property map', ()
 test('assemblePlaybook uses section fallback when a text is missing', () => {
   const { properties } = assemblePlaybook({ account_snapshot: 'x' });
   assert.equal(properties['playbook_why_now'], PLAYBOOK_SECTIONS.find((s) => s.name === 'why_now')!.fallback);
+});
+
+test('generate.sales-playbook is registered and live', () => {
+  const op = OPERATIONS['generate.sales-playbook'];
+  assert.ok(op);
+  assert.equal(op.status, 'live');
+  assert.equal(op.category, 'generate');
 });
