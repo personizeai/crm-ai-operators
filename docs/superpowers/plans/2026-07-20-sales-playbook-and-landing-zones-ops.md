@@ -725,10 +725,15 @@ export const generateLandingZones: OperationEntry = {
     // failing stays ok:true. appendUpdate's third arg is the entity type ('contact')
     // and its update `type` must be a valid WorkspaceUpdate type ('action'), and
     // `details` is Record<string, unknown>, not a bare string (reconcile with score-icp-fit.ts).
-    await setProperties({ email, type: 'contact' }, { zone_status: 'generated', ...properties });
+    const memoryWritten = await setProperties({ email, type: 'contact' }, { zone_status: 'generated', ...properties });
+    if (!memoryWritten) {
+      return { ...base, ok: false, summary: `zones generated for ${email} but memory write failed` };
+    }
 
     await appendUpdate({ email }, { author: 'generate.landing-zones', type: 'action', summary: `Generated ${Object.keys(properties).length} landing zones`, details: { properties } }, 'contact');
 
+    // Short-circuit: the CRM mirror only runs after a successful memory write, so the
+    // external CRM can never be ahead of Personize memory (the source of truth).
     const crmRecordId = (contact as { crm_record_id?: string }).crm_record_id;
     let wrote = false;
     if (crmRecordId) {
