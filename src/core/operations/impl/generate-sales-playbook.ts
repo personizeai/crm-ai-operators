@@ -17,7 +17,7 @@ import {
 import { PLAYBOOK_SECTIONS, assemblePlaybook } from "../../lib/playbook/sections.js";
 import type { CrmId, OperationEntry } from "../types.js";
 
-const REQUIRED_GUIDELINES = ["Sales Playbook Rules", "Brand Voice"];
+const REQUIRED_GUIDELINES = ["sales-playbook-rules", "brand-voice"];
 
 // One string field per doctrine section (each length-capped to its section's
 // max_chars, so an overlong model response fails schema validation and gets

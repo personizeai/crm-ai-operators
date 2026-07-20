@@ -7,6 +7,10 @@ tags: [playbook, sales, authoring, content, account, preparation]
 
 > A sales playbook is a pre-call preparation guide personalized to a specific account. It is composed of five fixed sections, each with specific requirements and constraints.
 
+## Runtime Guideline
+
+This document describes the shape of a sales playbook for whoever configures the operation. The rules the generation model actually reads at run time live in a separate, directly editable guideline named `sales-playbook-rules` (offer framing, the recency window for why-now, the five sections and their word budget), plus the shared `brand-voice` guideline for tone. Edit `sales-playbook-rules` to change playbook behavior without a code deploy. `generate.sales-playbook` loads both before every run and fails closed with "Missing required guidelines" if either comes back empty.
+
 ## The Five Fixed Sections
 
 A playbook must contain exactly these sections, in this order:
@@ -39,18 +43,18 @@ Playbooks are access-gated to the sales team and should never be shared external
 
 ## Storage and Personalization
 
-When a playbook is generated for an account, the full composed body lands in the `personize_playbook_full` property. Additionally, each section is stored separately in `personize_playbook_<section_name>` properties, so templates or systems can render individual sections if needed:
+When a playbook is generated for an account, the full composed body lands in the `playbook_full` property on the Personize contact record. Additionally, each section is stored separately in its own `playbook_<section_name>` property, so templates or systems can render individual sections if needed:
 
-- `personize_playbook_account_snapshot`
-- `personize_playbook_why_now`
-- `personize_playbook_talk_track`
-- `personize_playbook_landmines`
-- `personize_playbook_next_step`
+- `playbook_account_snapshot`
+- `playbook_why_now`
+- `playbook_talk_track`
+- `playbook_landmines`
+- `playbook_next_step`
 
-## Quality Gate: Self-Check on Ownership Claims
+These are the Personize property names, and Personize memory is the source of truth for them. The CRM writeback then mirrors the same values to the connected CRM's namespaced custom fields automatically, no separate mapping step needed: HubSpot receives `personize_playbook_<section_name>` (e.g. `personize_playbook_talk_track`), Salesforce receives `Personize_Playbook_<Section_Name>__c` (e.g. `Personize_Playbook_Talk_Track__c`). Author and reference the bare `playbook_*` names above; the CRM-specific prefix is applied by the writeback layer, not by this operation.
 
-Before emitting a playbook, the authoring model must verify that the talk track contains no unconfirmed ownership claims. The model self-checks by asking:
+## Quality Gate: Verify-Then-Emit
 
-> "Does the talk track claim this contact owns or controls the problem we are proposing to solve without explicit evidence (e.g., title, recent hiring in that function, known budget authority)?"
+Every playbook generation ends with a self-check step. While drafting, the model checks each section against the rules in `sales-playbook-rules`, most importantly that the talk track and landmines carry no unconfirmed ownership claim, meaning a claim that the account already uses our product, or that the contact controls the problem being proposed, without explicit evidence such as title, recent hiring in that function, or known budget authority. When the model finds a violation, it corrects the affected text itself, silently, as part of the same draft, before the output is returned.
 
-If the answer is yes, the model must reject and rewrite the talk track to remove the assumption. No playbook ships with "you need to approve this" or similar language unless the contact's title or role explicitly suggests decision authority.
+The model sets `verification.status` to `rejected` only as a hard stop, reserved for when the request genuinely cannot be satisfied while complying with the rules, for example when the contact facts contain nothing usable and the model cannot avoid inventing a claim. A rejection is terminal for that run: the operation returns `ok: false`, nothing is written to memory or the CRM, and there is no automatic retry or rewrite cycle within the call. No playbook ships with "you need to approve this" or similar language unless the contact's title or role explicitly suggests decision authority.

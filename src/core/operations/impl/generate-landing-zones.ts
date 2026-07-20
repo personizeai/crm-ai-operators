@@ -15,7 +15,7 @@ import type { ZoneResult } from "../../lib/zones/postprocess.js";
 import type { LeadContext } from "../../lib/zones/prompt.js";
 import type { CrmId, OperationEntry } from "../types.js";
 
-const REQUIRED_GUIDELINES = ["Landing Page Rules", "Brand Voice"];
+const REQUIRED_GUIDELINES = ["landing-page-rules", "brand-voice"];
 
 // ai() always returns JSON validated against a Zod object schema (see ai.ts's
 // buildPrompt, which wraps every single-prompt call with a "return this JSON
@@ -138,7 +138,7 @@ export const generateLandingZones: OperationEntry = {
     // The campaign's zone schema is its own guideline (a JSON body), loaded and
     // validated separately from guidelines_required above so a parse or shape
     // failure gets a specific error instead of a generic "missing" one.
-    const schemaBody = await loadGuideline("Landing Zone Schema");
+    const schemaBody = await loadGuideline("landing-zone-schema");
     let schema: ZoneSchema;
     try {
       schema = JSON.parse(schemaBody) as ZoneSchema;
@@ -202,7 +202,7 @@ export const generateLandingZones: OperationEntry = {
     // anything else, including unset, generates with AI (generate.ts).
     let zoneResults: Record<string, ZoneResult>;
     if (schema.generation_mode === "standard") {
-      const copyBody = await loadGuideline("Landing Zone Copy");
+      const copyBody = await loadGuideline("landing-zone-copy");
       zoneResults = parseStaticZones(copyBody, schema);
     } else {
       const out = await generateZones(schema, guidelines, lead, {
