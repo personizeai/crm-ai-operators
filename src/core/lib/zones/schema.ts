@@ -13,11 +13,13 @@ export interface ZoneSpec {
   fallback: string;
   guidance: string;
   theme?: string;
+  fallback_strategy?: 'fallback_copy' | 'hide_if_empty';
 }
 
 export interface ZoneSchema {
   format_version: 1;
   output: 'plain_text';
+  generation_mode?: 'personalized' | 'standard';
   zones: ZoneSpec[];
 }
 
@@ -62,6 +64,13 @@ export function validateZoneSchema(input: unknown): string[] {
     if (typeof zone['guidance'] !== 'string' || (zone['guidance'] as string).trim() === '') {
       errors.push(`zones[${i}].guidance: required non-empty string`);
     }
+    const strategy = zone['fallback_strategy'];
+    if (strategy !== undefined && strategy !== 'fallback_copy' && strategy !== 'hide_if_empty') {
+      errors.push(`zones[${i}].fallback_strategy: must be fallback_copy or hide_if_empty`);
+    }
   });
+  if (s['generation_mode'] !== undefined && s['generation_mode'] !== 'personalized' && s['generation_mode'] !== 'standard') {
+    errors.push(`generation_mode: must be personalized or standard`);
+  }
   return errors;
 }

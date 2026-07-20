@@ -1,6 +1,13 @@
-import { validateZoneSchema, type ZoneSchema } from './schema.js';
+import { validateZoneSchema, type ZoneSchema, type ZoneSpec } from './schema.js';
 import { buildZonePrompt, type LeadContext } from './prompt.js';
 import { processZoneOutput, type ZoneResult } from './postprocess.js';
+
+function applyFallbackStrategy(result: ZoneResult, zone: ZoneSpec): ZoneResult {
+  if (result.used_fallback && zone.fallback_strategy === 'hide_if_empty') {
+    return { text: '', used_fallback: true, notes: [...result.notes, 'hide_if_empty: wrote empty for template auto-hide'] };
+  }
+  return result;
+}
 
 /**
  * Orchestrates zone generation with per-zone failure isolation: one
@@ -34,6 +41,7 @@ export async function generateZones(
         notes: [`generation failed: ${err instanceof Error ? err.message : String(err)}`]
       };
     }
+    result = applyFallbackStrategy(result, zone);
     if (result.used_fallback) fallbacks++;
     for (const n of result.notes) notes.push(`${zone.name}: ${n}`);
     results[zone.name] = result;
