@@ -2,7 +2,6 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { z } from "zod";
-import type { CollectionPropertyDefinition } from "@personize/sdk";
 import { client } from "../config.js";
 import { logger } from "../lib/logger.js";
 import type { CrmId } from "../operations/types.js";
@@ -150,15 +149,28 @@ async function readJsonFiles(files: ManifestFile[]): Promise<Array<{ name: strin
 }
 
 /**
+ * The shape `toSdkProperties` returns: every manifest property field
+ * untouched (including manifest-only ones the SDK type doesn't declare, e.g.
+ * `writeback`/`source`), with `type` narrowed to drop `longtext`. Structurally
+ * compatible with `CollectionPropertyDefinition[]` for the collections.create
+ * / collections.update calls, extra fields are simply ignored by the SDK.
+ */
+type SdkSafeProperty = Omit<CollectionManifest["properties"][number], "type"> & {
+  type: Exclude<CollectionManifest["properties"][number]["type"], "longtext">;
+};
+
+/**
  * `longtext` is a CRM-writeback-only distinction (Salesforce/HubSpot custom
  * field sizing, see apply-crm-properties.ts's hubspotFieldType and
  * salesforceFieldMetadata). Personize's own collection storage has no such
  * length cap and the SDK's CollectionPropertyDefinition has no `longtext`
  * variant, so it collapses to `text` for the create/update payload. The
  * manifest file on disk keeps `longtext`; applyCrmProperties reads that copy
- * independently when provisioning the CRM-side field.
+ * independently when provisioning the CRM-side field. Every other field
+ * (including manifest-only ones like `writeback`/`source`) passes through
+ * unchanged.
  */
-function toSdkProperties(properties: CollectionManifest["properties"]): CollectionPropertyDefinition[] {
+export function toSdkProperties(properties: CollectionManifest["properties"]): SdkSafeProperty[] {
   return properties.map((p) => ({ ...p, type: p.type === "longtext" ? "text" : p.type }));
 }
 
