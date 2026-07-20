@@ -643,7 +643,12 @@ import { retrieveRecord } from '../../lib/recall.js';
 import { loadGuideline, loadGuidelines, missingGuidelines } from '../../lib/governance.js';
 import { ai } from '../../lib/ai.js';
 import { crmWriteback } from '../../lib/crm-writeback.js';
+// NOTE: appendUpdate is actually workspace.appendUpdate and setProperties lives in
+// persist.js; confirm the real import forms and signatures against score-icp-fit.ts
+// and persist.js before trusting these lines (Task 4 found the workspace import is
+// namespaced, not a bare export).
 import { appendUpdate } from '../../lib/workspace.js';
+import { setProperties } from '../../lib/persist.js';
 import { logger } from '../../lib/logger.js';
 import { applyGuards, DEFAULT_GUARD_CONFIG } from '../../lib/guards.js';
 import { z } from 'zod';
@@ -711,9 +716,18 @@ export const generateLandingZones: OperationEntry = {
       zoneResults[name] = { ...zoneResults[name]!, text: g.text };
       fires += g.fires.length;
     }
-    const properties = mapZonesToProperties(zoneResults);
+    const properties = mapZonesToProperties(zoneResults, { prefix: 'zone_' });
 
-    await appendUpdate({ email }, { author: 'generate.landing-zones', type: 'zones', summary: `Generated ${Object.keys(properties).length} landing zones`, details: JSON.stringify(properties) }, 'zones');
+    // Memory first (source of truth), then CRM mirror, matching crm-writeback.ts's
+    // documented order. Use the real persist helper that sets multiple properties on
+    // a record (confirm name/signature against src/core/lib/persist.ts and an existing
+    // caller). A memory-write failure makes the op return ok:false; the CRM mirror
+    // failing stays ok:true. appendUpdate's third arg is the entity type ('contact')
+    // and its update `type` must be a valid WorkspaceUpdate type ('action'), and
+    // `details` is Record<string, unknown>, not a bare string (reconcile with score-icp-fit.ts).
+    await setProperties({ email, type: 'contact' }, { zone_status: 'generated', ...properties });
+
+    await appendUpdate({ email }, { author: 'generate.landing-zones', type: 'action', summary: `Generated ${Object.keys(properties).length} landing zones`, details: { properties } }, 'contact');
 
     const crmRecordId = (contact as { crm_record_id?: string }).crm_record_id;
     let wrote = false;
@@ -729,7 +743,9 @@ export const generateLandingZones: OperationEntry = {
 };
 ```
 
-Same NOTE as Task 4: reconcile field/import names against `score-icp-fit.ts` and the manifest; record deviations. `mapZonesToProperties` prefixes `personize_zone_`; do NOT double-prefix in the writeback (pass the mapped keys as-is minus the `personize_` prefix, since `crmWriteback` re-adds it). IMPORTANT: because `mapZonesToProperties` already returns `personize_zone_<name>` keys, and `crmWriteback` re-prefixes `personize_`, you must strip the `personize_` from the mapped keys before writeback (or call `mapZonesToProperties` with an empty prefix `''` and let writeback add `personize_`). Use the empty-prefix option: `mapZonesToProperties(zoneResults, { prefix: 'zone_' })` so keys are `zone_<name>` and writeback makes them `personize_zone_<name>`.
+Same NOTE as Task 4: reconcile field/import names against `score-icp-fit.ts` and the manifest; record deviations. Prefix discipline: call `mapZonesToProperties(zoneResults, { prefix: 'zone_' })` so keys are `zone_<name>`; both `setProperties` (memory) and `crmWriteback` (which re-prefixes `personize_`) then produce `personize_zone_<name>` on the CRM. Do NOT pass keys that already start with `personize_` to `crmWriteback` or they double-prefix.
+
+Ownership safety for zones: unlike the playbook op, landing zones are generated one zone at a time, so a single verify-then-emit call does not fit. Zone ownership safety comes from two places already in the pipeline: `buildZonePrompt` injects an explicit offer-framing instruction ("never state or imply the company already uses the product") whenever `lead.confirmed_customer !== true`, and `applyGuards` still performs the config-independent coerce and placeholder-leak checks. Per-campaign banned-phrase and ownership-term enforcement depends on campaign guard config, which is a documented follow-up (note it in the report). Set `lead.confirmed_customer` from a real CRM/brief signal when available; default false (safe).
 
 - [ ] **Step 3: Register + registration test + typecheck**
 
