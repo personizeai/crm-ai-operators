@@ -725,7 +725,7 @@ export const generateLandingZones: OperationEntry = {
     // failing stays ok:true. appendUpdate's third arg is the entity type ('contact')
     // and its update `type` must be a valid WorkspaceUpdate type ('action'), and
     // `details` is Record<string, unknown>, not a bare string (reconcile with score-icp-fit.ts).
-    const memoryWritten = await setProperties({ email, type: 'contact' }, { zone_status: 'generated', ...properties });
+    const memoryWritten = await setProperties({ email, type: 'contact' }, { ...properties, zone_status: 'generated' });
     if (!memoryWritten) {
       return { ...base, ok: false, summary: `zones generated for ${email} but memory write failed` };
     }
@@ -738,7 +738,7 @@ export const generateLandingZones: OperationEntry = {
     let wrote = false;
     if (crmRecordId) {
       try {
-        wrote = await crmWriteback({ crm: context.crm, type: 'contact', crmRecordId }, { zone_status: 'generated', ...properties });
+        wrote = await crmWriteback({ crm: context.crm, type: 'contact', crmRecordId }, { ...properties, zone_status: 'generated' });
       } catch (err) {
         logger.warn('landing-zones: crm writeback failed', { error: err instanceof Error ? err.message : String(err) });
       }
